@@ -1,0 +1,49 @@
+<resources>
+    <string name="app_name">Sonomètre</string>
+
+    <!-- Units & labels -->
+    <string name="unit_db">dB</string>
+    <string name="label_min">MIN.</string>
+    <string name="label_avg">MOY.</string>
+    <string name="label_max">MAX.</string>
+    <string name="label_peak">Peak</string>
+    <string name="label_min_short">Min.</string>
+
+    <!-- Sound level descriptions -->
+    <string name="level_library">Bibliothèque</string>
+    <string name="level_quiet">Calme</string>
+    <string name="level_conversation">Conversation</string>
+    <string name="level_loud">Bruyant</string>
+    <string name="level_very_loud">Très bruyant</string>
+    <string name="level_dangerous">Dangereux</string>
+    <string name="level_format">%1$d dB : %2$s</string>
+
+    <!-- Bottom controls -->
+    <string name="action_start">Démarrer</string>
+    <string name="action_pause">Pause</string>
+    <string name="action_reset">Réinitialiser</string>
+    <string name="action_settings">Paramètres</string>
+    <string name="action_chart">Graphique</string>
+    <string name="action_calibration">Calibration</string>
+    <string name="action_weighting_a">Pondération A</string>
+    <string name="action_export">Exporter</string>
+    <string name="action_history">Historique</string>
+
+    <!-- Permission -->
+    <string name="microphone_required">Microphone requis</string>
+    <string name="microphone_permission_needed">Autorisation microphone nécessaire</string>
+    <string name="grant_permission">Autoriser</string>
+
+    <!-- Content descriptions -->
+    <string name="cd_top_actions">Actions du haut</string>
+    <string name="cd_gauge">Jauge de décibels</string>
+    <string name="cd_chart">Graphique des décibels en temps réel</string>
+    <string name="cd_main_button">Démarrer ou mettre la mesure en pause</string>
+    <string name="cd_button_chart">Afficher le graphique</string>
+    <string name="cd_button_export">Exporter</string>
+    <string name="cd_button_reset">Réinitialiser</string>
+    <string name="cd_button_weighting">Pondération</string>
+
+    <!-- Misc -->
+    <string name="time_format">%02d:%02d</string>
+</resources>
