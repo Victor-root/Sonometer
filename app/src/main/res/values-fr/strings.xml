@@ -8,6 +8,7 @@
     <string name="label_max">MAX.</string>
     <string name="label_peak">Peak</string>
     <string name="label_min_short">Min.</string>
+    <string name="label_max_short">Max.</string>
 
     <!-- Sound level descriptions -->
     <string name="level_library">Bibliothèque</string>
