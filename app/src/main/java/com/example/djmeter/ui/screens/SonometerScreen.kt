@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -45,7 +46,6 @@ import com.example.djmeter.ui.components.DbLevelColorBar
 import com.example.djmeter.ui.components.DbLevelDescriptor
 import com.example.djmeter.ui.components.DbStatsRow
 import com.example.djmeter.ui.components.DbValueDisplay
-import com.example.djmeter.ui.components.TopActionBar
 import com.example.djmeter.viewmodels.MainViewModel
 
 @Composable
@@ -60,7 +60,6 @@ fun SonometerScreen(
     val minDb by viewModel.minDb.collectAsState()
     val avgDb by viewModel.avgDb.collectAsState()
     val maxDb by viewModel.maxDb.collectAsState()
-    val hasSession by viewModel.hasSessionData.collectAsState()
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -74,6 +73,16 @@ fun SonometerScreen(
     ) { granted ->
         permissionGranted = granted
         if (granted) viewModel.startRecording()
+    }
+
+    // Auto-start: as soon as we know the permission is granted, start measuring.
+    // If the permission isn't granted yet, request it once on first composition.
+    LaunchedEffect(permissionGranted) {
+        if (permissionGranted) {
+            if (!viewModel.isRecording.value) viewModel.startRecording()
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
@@ -100,7 +109,6 @@ fun SonometerScreen(
                 minDb = minDb,
                 avgDb = avgDb,
                 maxDb = maxDb,
-                hasSession = hasSession,
                 topPadding = statusBarsPadding,
                 bottomPadding = systemBarsPadding,
                 onToggle = { viewModel.toggleRecording() },
@@ -125,9 +133,8 @@ private fun SonometerContent(
     minDb: Float?,
     avgDb: Float?,
     maxDb: Float?,
-    hasSession: Boolean,
-    topPadding: androidx.compose.foundation.layout.PaddingValues,
-    bottomPadding: androidx.compose.foundation.layout.PaddingValues,
+    topPadding: PaddingValues,
+    bottomPadding: PaddingValues,
     onToggle: () -> Unit,
     onReset: () -> Unit,
     onExport: () -> Unit,
@@ -138,16 +145,7 @@ private fun SonometerContent(
             .padding(top = topPadding.calculateTopPadding()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        TopActionBar(
-            modifier = Modifier.padding(top = 8.dp),
-            onReset = onReset,
-            onCalibrate = { /* TODO calibration */ },
-            onWeighting = { /* TODO weighting */ },
-            onMenu = { /* TODO menu */ },
-            canReset = isRecording || hasSession || (readings.isNotEmpty()),
-        )
-
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(16.dp))
 
         DbGauge(
             decibel = decibel,
@@ -181,7 +179,10 @@ private fun SonometerContent(
 
         Spacer(Modifier.height(12.dp))
 
-        DbLevelColorBar(modifier = Modifier.padding(horizontal = 16.dp))
+        DbLevelColorBar(
+            decibel = decibel,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
 
         Spacer(Modifier.height(8.dp))
 
@@ -197,11 +198,9 @@ private fun SonometerContent(
 
         BottomControlBar(
             isRecording = isRecording,
-            onChart = { /* TODO open detailed chart */ },
             onExport = onExport,
             onToggleRecording = onToggle,
             onReset = onReset,
-            onWeighting = { /* TODO weighting */ },
         )
 
         Spacer(

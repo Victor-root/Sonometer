@@ -194,16 +194,17 @@ private fun DrawScope.drawGauge(
         db += minorStep
     }
 
-    // Min marker
+    // Min marker — drawn INSIDE the arc so it doesn't collide with the "20" label.
     if (minDb != null) {
         val frac = ((minDb - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
         val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * frac
         drawTick(cx, cy, outerRadius - arcStroke / 2f, tickMajorLen * 0.7f, angleDeg, mutedColor, major = true)
         safeDrawArcLabel(textMeasurer, minLabel, smallStyle.copy(color = mutedColor),
-            cx, cy, outerRadius + outerRadius * 0.10f, angleDeg, size)
+            cx, cy, outerRadius * 0.82f, angleDeg, size)
     }
 
-    // Peak marker (bar + text)
+    // Peak marker — bar across the arc, then "Peak" + value drawn INSIDE the arc
+    // (below the tick), matching the reference screenshot.
     if (peakDb != null) {
         val frac = ((peakDb - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
         val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * frac
@@ -217,9 +218,9 @@ private fun DrawScope.drawGauge(
             strokeWidth = arcStroke * 0.9f,
         )
         safeDrawArcLabel(textMeasurer, peakLabel, smallStyle,
-            cx, cy, outerRadius + outerRadius * 0.14f, angleDeg, size)
+            cx, cy, outerRadius * 0.82f, angleDeg, size)
         safeDrawArcLabel(textMeasurer, peakDb.toInt().toString(), smallStyle,
-            cx, cy, outerRadius + outerRadius * 0.28f, angleDeg, size)
+            cx, cy, outerRadius * 0.68f, angleDeg, size)
     }
 
     // Animated needle
