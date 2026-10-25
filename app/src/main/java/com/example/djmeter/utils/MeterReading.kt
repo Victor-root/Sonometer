@@ -9,39 +9,41 @@ enum class TimeWeighting(val tauSeconds: Double) {
     SLOW(1.0),
     IMPULSE(0.035);
 
+    /** Time for a level starting from rest to come within 0.1 dB of a steady sound. */
+    val settleSeconds: Double
+        get() = SETTLE_TIME_CONSTANTS * tauSeconds
+
     companion object {
         const val IMPULSE_DECAY_SECONDS = 1.5
+        private const val SETTLE_TIME_CONSTANTS = 4.0
     }
 }
 
-/** Time-weighted level with its session extremes, in dB. */
+/** Time-weighted level with its measurement extremes (null until settled), in dB. */
 data class LevelStats(
     val levelDb: Float,
-    val minDb: Float,
-    val maxDb: Float,
+    val minDb: Float?,
+    val maxDb: Float?,
 )
 
 /**
  * Levels of one frequency weighting, in dB.
  *
  * - [leqDb]      equivalent continuous level over the whole measurement.
- * - [peakDb]     highest instantaneous weighted sample of the last interval.
  * - [peakMaxDb]  highest instantaneous weighted sample of the measurement.
  */
 data class WeightedLevels(
-    val leqDb: Float,
-    val peakDb: Float,
-    val peakMaxDb: Float,
+    val leqDb: Float?,
+    val peakMaxDb: Float?,
     val byTime: Map<TimeWeighting, LevelStats>,
 ) {
     operator fun get(timeWeighting: TimeWeighting): LevelStats = byTime.getValue(timeWeighting)
 
     fun shifted(offsetDb: Float) = WeightedLevels(
-        leqDb = leqDb + offsetDb,
-        peakDb = peakDb + offsetDb,
-        peakMaxDb = peakMaxDb + offsetDb,
+        leqDb = leqDb?.plus(offsetDb),
+        peakMaxDb = peakMaxDb?.plus(offsetDb),
         byTime = byTime.mapValues { (_, s) ->
-            LevelStats(s.levelDb + offsetDb, s.minDb + offsetDb, s.maxDb + offsetDb)
+            LevelStats(s.levelDb + offsetDb, s.minDb?.plus(offsetDb), s.maxDb?.plus(offsetDb))
         },
     )
 }
@@ -62,6 +64,4 @@ data class MeterReading(
     val signalLost: Boolean,
 ) {
     operator fun get(weighting: FrequencyWeighting): WeightedLevels = byWeighting.getValue(weighting)
-
-    fun shifted(offsetDb: Float) = copy(byWeighting = byWeighting.mapValues { it.value.shifted(offsetDb) })
 }

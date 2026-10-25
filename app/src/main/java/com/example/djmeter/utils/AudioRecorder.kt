@@ -48,12 +48,14 @@ class AudioRecorder(private val context: Context) {
 
     /**
      * Starts capturing. [onStart] runs on the capture thread before the first
-     * block, then [onSamples] receives every block. Returns null when no
-     * source could be opened.
+     * block, then [onSamples] receives every block. [onError] runs on the
+     * capture thread if the stream dies; [stop] must still be called. Returns
+     * null when no source could be opened.
      */
     fun start(
         onStart: (Config) -> Unit,
         onSamples: (samples: FloatArray, count: Int) -> Unit,
+        onError: () -> Unit,
     ): Config? {
         if (isRecording) return null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
@@ -77,30 +79,37 @@ class AudioRecorder(private val context: Context) {
 
         audioRecord = record
         isRecording = true
-        thread = Thread({ captureLoop(record, config, onStart, onSamples) }, "sonometer-capture")
+        thread = Thread({ captureLoop(record, config, onStart, onSamples, onError) }, "sonometer-capture")
             .also { it.start() }
         debugLog("capture started: $config")
         return config
     }
 
+    /** Stops the capture; no block is delivered once this returns. */
     fun stop() {
-        if (!isRecording) return
+        val record = audioRecord ?: return
         isRecording = false
+        // Stopping first unblocks a pending read so the thread can end.
+        stopQuietly(record)
         try {
             thread?.join(STOP_TIMEOUT_MS)
         } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
         }
         thread = null
-        audioRecord?.let { release(it) }
+        release(record)
         audioRecord = null
     }
+
+    /** The source a capture will use, best available first. */
+    fun preferredSource(): MicSource = availableSources().first()
 
     private fun captureLoop(
         record: AudioRecord,
         config: Config,
         onStart: (Config) -> Unit,
         onSamples: (FloatArray, Int) -> Unit,
+        onError: () -> Unit,
     ) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         val blockSize = config.sampleRate / BLOCKS_PER_SECOND
@@ -116,11 +125,13 @@ class AudioRecorder(private val context: Context) {
                     for (i in 0 until n) samples[i] = pcm16[i] / PCM16_FULL_SCALE
                 }
             }
+            if (!isRecording) break
             when {
                 read > 0 -> onSamples(samples, read)
                 read == 0 -> continue
                 else -> {
                     debugLog("read error $read, stopping capture")
+                    onError()
                     break
                 }
             }
@@ -183,12 +194,16 @@ class AudioRecorder(private val context: Context) {
         return created
     }
 
-    private fun release(record: AudioRecord) {
+    private fun stopQuietly(record: AudioRecord) {
         try {
             record.stop()
         } catch (_: IllegalStateException) {
             // Never started.
         }
+    }
+
+    private fun release(record: AudioRecord) {
+        stopQuietly(record)
         record.release()
         effects.forEach { it.release() }
         effects = emptyList()
@@ -204,6 +219,6 @@ class AudioRecorder(private val context: Context) {
         private const val BLOCKS_PER_SECOND = 50
         private const val BUFFER_SECONDS = 0.5
         private const val PCM16_FULL_SCALE = 32768f
-        private const val STOP_TIMEOUT_MS = 500L
+        private const val STOP_TIMEOUT_MS = 1000L
     }
 }

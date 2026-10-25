@@ -55,6 +55,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val pdfGenerator = PdfGenerator()
     private val meter = SoundLevelMeter()
 
+    /** Source used for calibration and display until a capture reports the real one. */
+    private val defaultSource: MicSource by lazy { audioRecorder.preferredSource() }
+
     private val capture = MutableStateFlow(Capture())
 
     private val settings: StateFlow<MeterSettings> = settingsStore.settings
@@ -72,6 +75,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val config = audioRecorder.start(
             onStart = { meter.start(it.sampleRate) },
             onSamples = { samples, count -> meter.process(samples, count, ::onReading) },
+            onError = { viewModelScope.launch { onCaptureError() } },
         )
         capture.update {
             it.copy(
@@ -100,8 +104,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun onReading(reading: MeterReading) {
         capture.update {
-            it.copy(reading = reading, history = (it.history + reading).takeLast(MAX_HISTORY))
+            val history = if (reading.signalLost) it.history else (it.history + reading).takeLast(MAX_HISTORY)
+            it.copy(reading = reading, history = history)
         }
+    }
+
+    private fun onCaptureError() {
+        audioRecorder.stop()
+        capture.update { it.copy(isRecording = false, micUnavailable = true) }
     }
 
     // ---------- Meter settings ----------
@@ -118,7 +128,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun adjustCalibration(deltaDb: Float) {
         val source = calibrationSource()
-        setCalibration(source, settings.value.calibrationFor(source) + deltaDb)
+        viewModelScope.launch { settingsStore.updateCalibration(source) { it + deltaDb } }
     }
 
     fun resetCalibration() = setCalibration(calibrationSource(), 0f)
@@ -141,7 +151,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { settingsStore.setCalibration(source, valueDb) }
     }
 
-    private fun calibrationSource(): MicSource = capture.value.source ?: MicSource.UNPROCESSED
+    private fun calibrationSource(): MicSource = capture.value.source ?: defaultSource
 
     // ---------- Export ----------
 
@@ -151,7 +161,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun toUiState(c: Capture, s: MeterSettings): MeterUiState {
-        val source = c.source ?: MicSource.UNPROCESSED
+        val source = c.source ?: defaultSource
         val calibration = s.calibrationFor(source)
         val offset = source.fullScaleSpl + calibration
         val weighted = c.reading?.get(s.frequencyWeighting)?.shifted(offset)

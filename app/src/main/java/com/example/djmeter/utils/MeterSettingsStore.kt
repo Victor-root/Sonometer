@@ -46,9 +46,13 @@ class MeterSettingsStore(private val context: Context) {
         context.meterDataStore.edit { it[timeKey] = value.name }
     }
 
-    suspend fun setCalibration(source: MicSource, valueDb: Float) {
+    suspend fun setCalibration(source: MicSource, valueDb: Float) = updateCalibration(source) { valueDb }
+
+    /** Applies [transform] to the stored value atomically, so quick successive changes all count. */
+    suspend fun updateCalibration(source: MicSource, transform: (Float) -> Float) {
         context.meterDataStore.edit {
-            it[calibrationKey(source)] = valueDb.coerceIn(MIN_CALIBRATION_DB, MAX_CALIBRATION_DB)
+            val key = calibrationKey(source)
+            it[key] = transform(it[key] ?: 0f).coerceIn(MIN_CALIBRATION_DB, MAX_CALIBRATION_DB)
         }
     }
 

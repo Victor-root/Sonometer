@@ -16,6 +16,11 @@ import kotlin.math.roundToInt
  * exponential time weighting, as in a physical meter. Leq integrates the
  * squared weighted signal itself, never already-averaged dB values.
  *
+ * Each capture run starts with a warm-up that only settles the filters. The
+ * time weightings then start from rest, like a meter being switched on, and
+ * each one enters the min/max statistics once it has settled
+ * ([TimeWeighting.settleSeconds]), so its rise from zero is never taken as a minimum.
+ *
  * Statistics survive [start] so a paused measurement can be resumed; only
  * [reset] clears them. Not thread-safe: call it from the capture thread only.
  */
@@ -24,15 +29,16 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
     private var sampleRate = 0
     private var reportSamples = 0
     private var warmupSamples = 0
-    private var seedSamples = 0
 
     private var dcAlpha = 0.0
     private var dcX1 = 0.0
     private var dcY1 = 0.0
 
+    private val stats = FrequencyWeighting.entries.map { Stats() }
     private var channels: List<Channel> = emptyList()
     private var warmupIndex = 0
     private var samplesSinceReport = 0
+    private var silentSamples = 0
     private var intervalOverload = false
 
     private var measuredSeconds = 0.0
@@ -41,29 +47,30 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
 
     /** Prepares a new capture run at [sampleRate], keeping the statistics. */
     fun start(sampleRate: Int) {
+        closeInterval()
         if (sampleRate != this.sampleRate) {
+            if (this.sampleRate > 0) stats.forEach { it.fold(this.sampleRate) }
             this.sampleRate = sampleRate
             reportSamples = max(1, (sampleRate * reportIntervalSeconds).roundToInt())
             warmupSamples = (sampleRate * WARMUP_SECONDS).roundToInt()
-            seedSamples = (sampleRate * SEED_SECONDS).roundToInt()
             dcAlpha = exp(-2.0 * PI * DC_CUTOFF_HZ / sampleRate)
-            val previous = channels
             channels = FrequencyWeighting.entries.mapIndexed { i, w ->
-                Channel(WeightingFilter(w, sampleRate), sampleRate).also { c -> previous.getOrNull(i)?.let(c::takeStatsFrom) }
+                Channel(WeightingFilter(w, sampleRate), sampleRate, stats[i])
             }
         }
         dcX1 = 0.0
         dcY1 = 0.0
         channels.forEach { it.restartSignal() }
         warmupIndex = 0
-        samplesSinceReport = 0
+        silentSamples = 0
         intervalOverload = false
         signalLost = false
     }
 
     /** Clears every statistic of the measurement. */
     fun reset() {
-        channels.forEach { it.resetStats() }
+        stats.forEach { it.clear() }
+        samplesSinceReport = 0
         measuredSeconds = 0.0
         overloadLatched = false
     }
@@ -83,9 +90,9 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
                 start(sampleRate)
                 signalLost = true
             }
-            samplesSinceReport += count
-            if (samplesSinceReport >= reportSamples && channels.first().hasMeasured) {
-                samplesSinceReport = 0
+            silentSamples += count
+            if (silentSamples >= reportSamples) {
+                silentSamples = 0
                 onReading(snapshot())
             }
             return
@@ -99,10 +106,8 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
             dcY1 = y
 
             if (warmupIndex < warmupSamples) {
-                val seeding = warmupIndex >= warmupSamples - seedSamples
-                for (c in channels) c.warmUp(y, seeding)
+                for (c in channels) c.warmUp(y)
                 warmupIndex++
-                if (warmupIndex == warmupSamples) channels.forEach { it.seed(seedSamples) }
                 continue
             }
 
@@ -110,14 +115,19 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
             for (c in channels) c.measure(y)
 
             if (++samplesSinceReport >= reportSamples) {
-                measuredSeconds += samplesSinceReport.toDouble() / sampleRate
-                overloadLatched = overloadLatched || intervalOverload
+                closeInterval()
                 onReading(snapshot())
-                samplesSinceReport = 0
                 intervalOverload = false
-                channels.forEach { it.peakInterval = 0.0 }
             }
         }
+    }
+
+    /** Accounts the measured part of the current report interval. */
+    private fun closeInterval() {
+        if (samplesSinceReport == 0) return
+        measuredSeconds += samplesSinceReport.toDouble() / sampleRate
+        overloadLatched = overloadLatched || intervalOverload
+        samplesSinceReport = 0
     }
 
     private fun snapshot(): MeterReading = MeterReading(
@@ -133,101 +143,109 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
         return count > 0
     }
 
-    private class Channel(private val filter: WeightingFilter, sampleRate: Int) {
-        private val times = TimeWeighting.entries
-        private val meanSquare = DoubleArray(times.size)
-        private val minMs = DoubleArray(times.size)
-        private val maxMs = DoubleArray(times.size)
-        private var impulseHeld = 0.0
-        private var seedSum = 0.0
-        private val coefficients = DoubleArray(times.size) { 1.0 - exp(-1.0 / (sampleRate * times[it].tauSeconds)) }
-        private val impulseDecay = exp(-1.0 / (sampleRate * TimeWeighting.IMPULSE_DECAY_SECONDS))
+    /** Measurement statistics of one frequency weighting, kept across runs. */
+    private class Stats {
+        val minMs = DoubleArray(TimeWeighting.entries.size)
+        val maxMs = DoubleArray(TimeWeighting.entries.size)
+        var peak = 0.0
 
-        private var sumSquares = 0.0
-        private var count = 0L
-        var peakInterval = 0.0
-        private var peakSession = 0.0
+        /** Energy and sample count at the current sample rate. */
+        var energy = 0.0
+        var samples = 0L
 
-        val hasMeasured: Boolean get() = count > 0
+        /** Energy·seconds and seconds of earlier sample rates. */
+        private var foldedEnergy = 0.0
+        private var foldedSeconds = 0.0
 
         init {
-            resetStats()
+            clear()
         }
+
+        fun clear() {
+            minMs.fill(Double.POSITIVE_INFINITY)
+            maxMs.fill(NOT_SET)
+            peak = 0.0
+            energy = 0.0
+            samples = 0
+            foldedEnergy = 0.0
+            foldedSeconds = 0.0
+        }
+
+        fun fold(sampleRate: Int) {
+            foldedEnergy += energy / sampleRate
+            foldedSeconds += samples.toDouble() / sampleRate
+            energy = 0.0
+            samples = 0
+        }
+
+        fun leqMeanSquare(sampleRate: Int): Double? {
+            val seconds = foldedSeconds + samples.toDouble() / sampleRate
+            return if (seconds > 0.0) (foldedEnergy + energy / sampleRate) / seconds else null
+        }
+    }
+
+    private class Channel(
+        private val filter: WeightingFilter,
+        private val sampleRate: Int,
+        private val stats: Stats,
+    ) {
+        private val times = TimeWeighting.entries
+        private val impulseIndex = TimeWeighting.IMPULSE.ordinal
+        private val coefficients = DoubleArray(times.size) { 1.0 - exp(-1.0 / (sampleRate * times[it].tauSeconds)) }
+        private val impulseDecay = exp(-1.0 / (sampleRate * TimeWeighting.IMPULSE_DECAY_SECONDS))
+        private val settleSamples = LongArray(times.size) { (sampleRate * times[it].settleSeconds).toLong() }
+
+        private val meanSquare = DoubleArray(times.size)
+        private var impulseHeld = 0.0
+        private var samplesSinceStart = 0L
 
         fun restartSignal() {
             filter.reset()
             meanSquare.fill(0.0)
             impulseHeld = 0.0
-            seedSum = 0.0
-            peakInterval = 0.0
+            samplesSinceStart = 0
         }
 
-        fun resetStats() {
-            minMs.fill(Double.MAX_VALUE)
-            maxMs.fill(0.0)
-            sumSquares = 0.0
-            count = 0
-            peakSession = 0.0
-        }
-
-        fun takeStatsFrom(other: Channel) {
-            other.minMs.copyInto(minMs)
-            other.maxMs.copyInto(maxMs)
-            sumSquares = other.sumSquares
-            count = other.count
-            peakSession = other.peakSession
-        }
-
-        fun warmUp(x: Double, seeding: Boolean) {
-            val y = filter.process(x)
-            if (seeding) seedSum += y * y
-        }
-
-        /** Starts the integrators from the settled level instead of silence. */
-        fun seed(seedSamples: Int) {
-            val ms = seedSum / max(1, seedSamples)
-            meanSquare.fill(ms)
-            impulseHeld = ms
+        fun warmUp(x: Double) {
+            filter.process(x)
         }
 
         fun measure(x: Double) {
             val y = filter.process(x)
             val sq = y * y
-            sumSquares += sq
-            count++
+            stats.energy += sq
+            stats.samples++
             val a = abs(y)
-            if (a > peakInterval) peakInterval = a
-            if (a > peakSession) peakSession = a
+            if (a > stats.peak) stats.peak = a
 
             for (t in times.indices) {
                 meanSquare[t] += (sq - meanSquare[t]) * coefficients[t]
             }
-            val impulseIndex = TimeWeighting.IMPULSE.ordinal
             impulseHeld = max(meanSquare[impulseIndex], impulseHeld * impulseDecay)
 
+            samplesSinceStart++
             for (t in times.indices) {
-                val ms = if (t == impulseIndex) impulseHeld else meanSquare[t]
-                if (ms < minMs[t]) minMs[t] = ms
-                if (ms > maxMs[t]) maxMs[t] = ms
+                if (samplesSinceStart < settleSamples[t]) continue
+                val ms = level(t)
+                if (ms < stats.minMs[t]) stats.minMs[t] = ms
+                if (ms > stats.maxMs[t]) stats.maxMs[t] = ms
             }
         }
 
-        fun levels(): WeightedLevels {
-            val impulseIndex = TimeWeighting.IMPULSE.ordinal
-            return WeightedLevels(
-                leqDb = powerDb(if (count > 0) sumSquares / count else 0.0),
-                peakDb = amplitudeDb(peakInterval),
-                peakMaxDb = amplitudeDb(peakSession),
-                byTime = times.associateWith { t ->
-                    val i = t.ordinal
-                    LevelStats(
-                        levelDb = powerDb(if (i == impulseIndex) impulseHeld else meanSquare[i]),
-                        minDb = powerDb(minMs[i]),
-                        maxDb = powerDb(maxMs[i]),
-                    )
-                },
-            )
-        }
+        private fun level(t: Int): Double = if (t == impulseIndex) impulseHeld else meanSquare[t]
+
+        fun levels(): WeightedLevels = WeightedLevels(
+            leqDb = stats.leqMeanSquare(sampleRate)?.let(::powerDb),
+            peakMaxDb = stats.peak.takeIf { it > 0.0 }?.let(::amplitudeDb),
+            byTime = times.associateWith { t ->
+                val i = t.ordinal
+                LevelStats(
+                    levelDb = powerDb(level(i)),
+                    minDb = stats.minMs[i].takeIf { it != Double.POSITIVE_INFINITY }?.let(::powerDb),
+                    maxDb = stats.maxMs[i].takeIf { it != NOT_SET }?.let(::powerDb),
+                )
+            },
+        )
     }
 
     companion object {
@@ -236,9 +254,9 @@ class SoundLevelMeter(private val reportIntervalSeconds: Double = 0.1) {
 
         /** First samples of each run are only used to settle the filters. */
         const val WARMUP_SECONDS = 0.5
-        private const val SEED_SECONDS = 0.125
         private const val DC_CUTOFF_HZ = 2.0
         private const val OVERLOAD_THRESHOLD = 0.989 // -0.1 dBFS
+        private const val NOT_SET = -1.0
 
         fun powerDb(meanSquare: Double): Float =
             if (meanSquare <= 0.0) FLOOR_DB
