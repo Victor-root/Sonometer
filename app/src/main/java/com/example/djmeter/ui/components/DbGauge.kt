@@ -52,7 +52,7 @@ fun DbGauge(
     modifier: Modifier = Modifier,
     minDb: Float? = null,
     peakDb: Float? = null,
-    height: Dp = 220.dp,
+    height: Dp = 250.dp,
 ) {
     val animatedDb by animateFloatAsState(
         targetValue = decibel.coerceIn(DB_MIN, DB_MAX),
@@ -120,17 +120,14 @@ private fun DrawScope.drawGauge(
     val w = size.width
     val h = size.height
 
-    // Radius sized to leave room for labels on both sides:
-    // labels at the extremes (20 dB and 120 dB) are at ±cos(20°)≈0.94 from center.
-    // Using w*0.35 keeps the furthest label at 0.5w + 0.45w*0.94 ≈ 0.92w → inside canvas.
-    val outerRadius = w * 0.35f
+    val outerRadius = w * 0.40f
     val cx = w / 2f
-    val cy = h * 0.94f           // arc center is near the bottom of the canvas
+    val cy = h * 0.95f
     val arcStroke = (outerRadius * 0.032f).coerceAtLeast(4f)
 
     val tickMajorLen = outerRadius * 0.12f
     val tickMinorLen = outerRadius * 0.06f
-    val labelRadius = outerRadius + outerRadius * 0.22f  // labels just outside the arc
+    val labelRadius = outerRadius + outerRadius * 0.16f  // labels just outside the arc
 
     // Hot zone boundary along the arc
     val hotFraction = ((DB_HOT_THRESHOLD - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
@@ -166,7 +163,7 @@ private fun DrawScope.drawGauge(
         val peakFracForArc = ((peakDb.coerceIn(DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
         val peakSweepDeg = GAUGE_SWEEP_DEG * peakFracForArc
         if (peakSweepDeg > 0.5f) {
-            val peakArcRadius = outerRadius - arcStroke * 1.9f
+            val peakArcRadius = outerRadius - arcStroke * 3.6f
             val peakArcStroke = arcStroke * 0.55f
             drawArc(
                 color = mutedColor.copy(alpha = 0.55f),
@@ -241,9 +238,27 @@ private fun DrawScope.drawGauge(
         }
     }
 
-    // Peak marker — thin red tick crossing the arc (persists as needle moves),
-    // a "Max." anchor rotated along the arc tangent (mirrors "Min." on the left),
-    // and the "Peak" + value text block deeper inside so it doesn't collide with Max.
+    // Static "Max." anchor at the right end of the main scale — mirrors "Min." on the left.
+    val maxStaticAngle = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG
+    val maxStaticRad = Math.toRadians(maxStaticAngle.toDouble())
+    val maxStyled = smallStyle.copy(color = mutedColor)
+    val maxMeasured = textMeasurer.measure(maxLabel, maxStyled)
+    val msw = maxMeasured.size.width.toFloat()
+    val msh = maxMeasured.size.height.toFloat()
+    val msx = cx + (outerRadius * 0.72f * cos(maxStaticRad)).toFloat()
+    val msy = cy + (outerRadius * 0.72f * sin(maxStaticRad)).toFloat()
+    withTransform({ rotate(maxStaticAngle + 90f, Offset(msx, msy)) }) {
+        drawText(
+            textMeasurer = textMeasurer,
+            text = maxLabel,
+            style = maxStyled,
+            topLeft = Offset(msx - msw / 2f, msy - msh / 2f),
+            size = Size(msw, msh),
+        )
+    }
+
+    // Peak marker — thin red tick crossing the arc (persists as needle moves)
+    // plus the "Peak" + value text block rotated along the arc tangent.
     if (peakDb != null) {
         val peakFrac = ((peakDb.coerceIn(DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
         val peakAngleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * peakFrac
@@ -260,26 +275,8 @@ private fun DrawScope.drawGauge(
             cap = StrokeCap.Butt,
         )
 
-        // "Max." anchor at the same radius as "Min." on the left (symmetric).
-        val maxStyled = smallStyle.copy(color = mutedColor)
-        val maxMeasured = textMeasurer.measure(maxLabel, maxStyled)
-        val mxw = maxMeasured.size.width.toFloat()
-        val mxh = maxMeasured.size.height.toFloat()
-        val mxx = cx + (outerRadius * 0.72f * cos(peakRad)).toFloat()
-        val mxy = cy + (outerRadius * 0.72f * sin(peakRad)).toFloat()
-        withTransform({ rotate(peakAngleDeg + 90f, Offset(mxx, mxy)) }) {
-            drawText(
-                textMeasurer = textMeasurer,
-                text = maxLabel,
-                style = maxStyled,
-                topLeft = Offset(mxx - mxw / 2f, mxy - mxh / 2f),
-                size = Size(mxw, mxh),
-            )
-        }
-
-        // "Peak" label + value stacked, rotated tangent to the arc, deeper inside
-        // (smaller radius) so it doesn't overlap with the Max. anchor above.
-        val blockCenterR = outerRadius * 0.55f
+        // "Peak" label + value stacked, rotated tangent to the arc.
+        val blockCenterR = outerRadius * 0.74f
         val plx = cx + (blockCenterR * cos(peakRad)).toFloat()
         val ply = cy + (blockCenterR * sin(peakRad)).toFloat()
         val peakMeasured = textMeasurer.measure(peakLabel, smallStyle)
