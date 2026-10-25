@@ -1,5 +1,7 @@
 package com.example.djmeter.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -116,26 +119,47 @@ fun DbLevelDescriptor(decibel: Float, modifier: Modifier = Modifier) {
     )
 }
 
-/** Multi-segment color bar: blue → green → yellow → orange → red. */
+/**
+ * Multi-segment level bar: blue → green → yellow → orange → red.
+ *
+ * Each segment lights up only while [decibel] is currently at or above
+ * that segment's threshold. Segments above the current value are dimmed.
+ * The animation is live: when the level drops, segments fade out again.
+ */
 @Composable
-fun DbLevelColorBar(modifier: Modifier = Modifier) {
+fun DbLevelColorBar(
+    decibel: Float,
+    modifier: Modifier = Modifier,
+) {
     val segments = colorBarSegments()
+    val activeCount = segmentsActiveFor(decibel, segments.size)
     Row(
         modifier = modifier
             .fillMaxWidth()
             .height(10.dp),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        segments.forEach { color ->
+        segments.forEachIndexed { index, color ->
+            val targetAlpha = if (index < activeCount) 1f else 0.18f
+            val alpha by animateFloatAsState(
+                targetValue = targetAlpha,
+                animationSpec = tween(durationMillis = 180),
+                label = "segment$index",
+            )
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .height(10.dp)
                     .clip(RoundedCornerShape(1.dp))
-                    .background(color),
+                    .background(color.copy(alpha = alpha)),
             )
         }
     }
+}
+
+private fun segmentsActiveFor(decibel: Float, total: Int): Int {
+    val frac = ((decibel - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
+    return (frac * total).roundToInt().coerceIn(0, total)
 }
 
 private fun colorBarSegments(): List<Color> {
