@@ -4,11 +4,14 @@ A modern, feature-rich decibel meter application built with Jetpack Compose that
 
 ## Features 🌟
 
-- **Real-time Sound Level Monitoring** 🔊
-  - Live decibel measurement
-  - Updates every 100ms for smooth readings
-  - Range: 0-120 dB
-  - Color-coded intensity levels
+- **Sound Level Meter Engine** 🔊
+  - A, C and Z frequency weightings (IEC 61672-1, Class 1 tolerances at 44.1/48 kHz)
+  - Fast, Slow and Impulse time weightings, applied per sample
+  - Leq (energy average), Lmin, Lmax and peak, all weightings measured simultaneously
+  - Overload indicator, start-up transient and silenced capture excluded from statistics
+  - Raw microphone capture (UNPROCESSED, then VOICE_RECOGNITION) with nominal Android CDD sensitivity
+  - Calibration against a reference sound level meter, stored per microphone source
+  - Range: 20-130 dB SPL
 
 - **Professional UI/UX** 💅
   - Material Design 3 implementation
