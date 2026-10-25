@@ -66,6 +66,7 @@ fun DbGauge(
     val gaugeCd = stringResource(R.string.cd_gauge)
     val peakLabel = stringResource(R.string.label_peak)
     val minLabel = stringResource(R.string.label_min_short)
+    val maxLabel = stringResource(R.string.label_max_short)
 
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = TextStyle(
@@ -95,6 +96,7 @@ fun DbGauge(
                 smallStyle = smallStyle,
                 peakLabel = peakLabel,
                 minLabel = minLabel,
+                maxLabel = maxLabel,
                 mutedColor = SonoOnDarkMuted,
                 hotColor = SonoRed,
             )
@@ -111,6 +113,7 @@ private fun DrawScope.drawGauge(
     smallStyle: TextStyle,
     peakLabel: String,
     minLabel: String,
+    maxLabel: String,
     mutedColor: Color,
     hotColor: Color,
 ) {
@@ -156,6 +159,26 @@ private fun DrawScope.drawGauge(
         size = arcSize,
         style = Stroke(width = arcStroke, cap = StrokeCap.Butt),
     )
+
+    // Peak progress arc — secondary arc that sweeps from start to peak position,
+    // drawn slightly inside the main arc and parallel to it.
+    if (peakDb != null) {
+        val peakFracForArc = ((peakDb.coerceIn(DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
+        val peakSweepDeg = GAUGE_SWEEP_DEG * peakFracForArc
+        if (peakSweepDeg > 0.5f) {
+            val peakArcRadius = outerRadius - arcStroke * 1.9f
+            val peakArcStroke = arcStroke * 0.55f
+            drawArc(
+                color = mutedColor.copy(alpha = 0.55f),
+                startAngle = GAUGE_START_ANGLE_DEG,
+                sweepAngle = peakSweepDeg,
+                useCenter = false,
+                topLeft = Offset(cx - peakArcRadius, cy - peakArcRadius),
+                size = Size(peakArcRadius * 2f, peakArcRadius * 2f),
+                style = Stroke(width = peakArcStroke, cap = StrokeCap.Round),
+            )
+        }
+    }
 
     // Ticks and labels — major every 10 dB, minor every 2 dB.
     val majorStep = 10
@@ -219,7 +242,8 @@ private fun DrawScope.drawGauge(
     }
 
     // Peak marker — thin red tick crossing the arc (persists as needle moves),
-    // then "Peak" + value rotated along the arc tangent.
+    // a "Max." anchor rotated along the arc tangent (mirrors "Min." on the left),
+    // and the "Peak" + value text block deeper inside so it doesn't collide with Max.
     if (peakDb != null) {
         val peakFrac = ((peakDb.coerceIn(DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
         val peakAngleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * peakFrac
@@ -236,8 +260,26 @@ private fun DrawScope.drawGauge(
             cap = StrokeCap.Butt,
         )
 
-        // "Peak" label + value stacked, rotated so baseline is tangent to the arc
-        val blockCenterR = outerRadius * 0.76f
+        // "Max." anchor at the same radius as "Min." on the left (symmetric).
+        val maxStyled = smallStyle.copy(color = mutedColor)
+        val maxMeasured = textMeasurer.measure(maxLabel, maxStyled)
+        val mxw = maxMeasured.size.width.toFloat()
+        val mxh = maxMeasured.size.height.toFloat()
+        val mxx = cx + (outerRadius * 0.72f * cos(peakRad)).toFloat()
+        val mxy = cy + (outerRadius * 0.72f * sin(peakRad)).toFloat()
+        withTransform({ rotate(peakAngleDeg + 90f, Offset(mxx, mxy)) }) {
+            drawText(
+                textMeasurer = textMeasurer,
+                text = maxLabel,
+                style = maxStyled,
+                topLeft = Offset(mxx - mxw / 2f, mxy - mxh / 2f),
+                size = Size(mxw, mxh),
+            )
+        }
+
+        // "Peak" label + value stacked, rotated tangent to the arc, deeper inside
+        // (smaller radius) so it doesn't overlap with the Max. anchor above.
+        val blockCenterR = outerRadius * 0.55f
         val plx = cx + (blockCenterR * cos(peakRad)).toFloat()
         val ply = cy + (blockCenterR * sin(peakRad)).toFloat()
         val peakMeasured = textMeasurer.measure(peakLabel, smallStyle)
