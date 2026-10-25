@@ -2,10 +2,11 @@
     <string name="app_name">Sonomètre</string>
 
     <!-- Units & labels -->
-    <string name="unit_db">dB</string>
+    <string name="unit_db_weighted">dB(%1$s)</string>
+    <string name="label_leq">LEQ</string>
     <string name="label_min">MIN.</string>
-    <string name="label_avg">MOY.</string>
     <string name="label_max">MAX.</string>
+    <string name="label_peak_stat">CRÊTE</string>
     <string name="label_peak">Peak</string>
     <string name="label_min_short">Min.</string>
     <string name="label_max_short">Max.</string>
@@ -44,18 +45,28 @@
     <string name="cd_button_export">Exporter</string>
     <string name="cd_button_reset">Réinitialiser</string>
     <string name="cd_button_weighting">Pondération</string>
+    <string name="cd_frequency_weighting">Pondération fréquentielle</string>
+    <string name="cd_time_weighting">Pondération temporelle</string>
 
     <!-- Calibration -->
     <string name="calibration_title">Calibration</string>
     <string name="calibration_correction">Correction</string>
     <string name="calibration_reset">Réinit.</string>
     <string name="calibration_align_title">Aligner avec un sonomètre</string>
+    <string name="calibration_align_hint">Utilise un son stable, la même pondération sur les deux appareils, et tiens le téléphone à côté du sonomètre.</string>
     <string name="calibration_reference_label">Valeur du sonomètre</string>
     <string name="calibration_align_action">Aligner</string>
     <string name="calibration_apply">Appliquer</string>
     <string name="calibration_value_format">%+.1f dB</string>
     <string name="weighting_fast">Fast</string>
     <string name="weighting_slow">Slow</string>
+    <string name="weighting_impulse">Impulse</string>
+
+    <!-- Meter status -->
+    <string name="status_overload">SATURÉ</string>
+    <string name="status_mic_unavailable">Micro indisponible</string>
+    <string name="status_signal_lost">Micro utilisé par une autre app</string>
+    <string name="status_settling">Mesure en cours…</string>
 
     <!-- Misc -->
     <string name="time_format">%02d:%02d</string>

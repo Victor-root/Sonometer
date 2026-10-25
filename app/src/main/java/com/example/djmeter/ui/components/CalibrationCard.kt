@@ -111,6 +111,11 @@ fun CalibrationCard(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
                 )
+                Text(
+                    text = stringResource(R.string.calibration_align_hint),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
                 Spacer(Modifier.height(6.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),

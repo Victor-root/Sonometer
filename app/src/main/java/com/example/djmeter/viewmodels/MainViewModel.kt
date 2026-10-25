@@ -2,201 +2,188 @@ package com.example.djmeter.viewmodels
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.djmeter.utils.AudioRecorder
-import com.example.djmeter.utils.BASE_OFFSET_DB
-import com.example.djmeter.utils.CalibrationStore
+import com.example.djmeter.utils.FrequencyWeighting
+import com.example.djmeter.utils.MeterReading
+import com.example.djmeter.utils.MeterSettings
+import com.example.djmeter.utils.MeterSettingsStore
+import com.example.djmeter.utils.MicSource
 import com.example.djmeter.utils.PdfGenerator
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import com.example.djmeter.utils.SoundLevelMeter
+import com.example.djmeter.utils.TimeWeighting
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.math.log10
-import kotlin.math.pow
+
+/** Everything the meter screen displays, already in calibrated dB SPL. */
+data class MeterUiState(
+    val isRecording: Boolean = false,
+    val micUnavailable: Boolean = false,
+    val frequencyWeighting: FrequencyWeighting = FrequencyWeighting.A,
+    val timeWeighting: TimeWeighting = TimeWeighting.FAST,
+    val calibrationDb: Float = 0f,
+    val levelDb: Float? = null,
+    val minDb: Float? = null,
+    val maxDb: Float? = null,
+    val leqDb: Float? = null,
+    val peakDb: Float? = null,
+    val overload: Boolean = false,
+    val overloadLatched: Boolean = false,
+    val signalLost: Boolean = false,
+    val elapsedSeconds: Long = 0,
+    val history: List<Float> = emptyList(),
+)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
+    private data class Capture(
+        val isRecording: Boolean = false,
+        val micUnavailable: Boolean = false,
+        val source: MicSource? = null,
+        val reading: MeterReading? = null,
+        val history: List<MeterReading> = emptyList(),
+    )
+
     private val audioRecorder = AudioRecorder(application.applicationContext)
+    private val settingsStore = MeterSettingsStore(application.applicationContext)
     private val pdfGenerator = PdfGenerator()
-    private val calibrationStore = CalibrationStore(application.applicationContext)
+    private val meter = SoundLevelMeter()
 
-    /** Persistent user calibration offset in dB (default 0). */
-    val calibrationOffset: StateFlow<Float> = calibrationStore.offsetFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, CalibrationStore.DEFAULT_OFFSET_DB)
+    private val capture = MutableStateFlow(Capture())
 
-    private val _decibelLevel = MutableStateFlow(0f)
-    val decibelLevel: StateFlow<Float> = _decibelLevel
+    private val settings: StateFlow<MeterSettings> = settingsStore.settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, MeterSettings())
 
-    /** Short-term per-window peak (instantaneous max sample, calibrated). */
-    private val _peakDb = MutableStateFlow<Float?>(null)
-    val peakDb: StateFlow<Float?> = _peakDb
-
-    private val _isRecording = MutableStateFlow(false)
-    val isRecording: StateFlow<Boolean> = _isRecording
-
-    // Bounded rolling buffer used by the live chart.
-    private val _decibelReadings = MutableStateFlow<List<Float>>(emptyList())
-    val decibelReadings: StateFlow<List<Float>> = _decibelReadings
-
-    private val _sessionReadings = MutableStateFlow<List<Float>>(emptyList())
-    val sessionReadings: StateFlow<List<Float>> = _sessionReadings
-
-    private val _hasSessionData = MutableStateFlow(false)
-    val hasSessionData: StateFlow<Boolean> = _hasSessionData
-
-    private val _recordingTime = MutableStateFlow(0L)
-    val recordingTime: StateFlow<Long> = _recordingTime
-
-    // Aggregated stats over the current session — all in calibrated dB.
-    private val _minDb = MutableStateFlow<Float?>(null)
-    val minDb: StateFlow<Float?> = _minDb
-
-    private val _maxDb = MutableStateFlow<Float?>(null)
-    val maxDb: StateFlow<Float?> = _maxDb
-
-    /** Energy-equivalent average (Leq), exposed under the existing avg flow. */
-    private val _avgDb = MutableStateFlow<Float?>(null)
-    val avgDb: StateFlow<Float?> = _avgDb
-
-    private var sumEnergyLin = 0.0
-    private var sampleCount = 0L
-    private var timerJob: Job? = null
+    val uiState: StateFlow<MeterUiState> = combine(capture, settings, ::toUiState)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MeterUiState())
 
     fun toggleRecording() {
-        if (_isRecording.value) pauseRecording() else startRecording()
+        if (capture.value.isRecording) pauseRecording() else startRecording()
     }
 
     fun startRecording() {
-        if (_isRecording.value) return
-
-        audioRecorder.startRecording { reading ->
-            val offset = calibrationOffset.value
-            val rmsCalibrated = (reading.rmsDbFs + BASE_OFFSET_DB + offset).coerceIn(0f, 120f)
-            val peakCalibrated = (reading.peakDbFs + BASE_OFFSET_DB + offset).coerceIn(0f, 120f)
-
-            viewModelScope.launch {
-                _decibelLevel.value = rmsCalibrated
-                _peakDb.value = peakCalibrated
-
-                val current = _decibelReadings.value.toMutableList()
-                if (current.size >= MAX_LIVE_READINGS) current.removeAt(0)
-                current.add(rmsCalibrated)
-                _decibelReadings.value = current
-
-                sampleCount += 1
-                sumEnergyLin += 10.0.pow(rmsCalibrated.toDouble() / 10.0)
-                val leq = (10.0 * log10(sumEnergyLin / sampleCount)).toFloat()
-                _avgDb.value = leq.coerceIn(0f, 120f)
-
-                _minDb.value = _minDb.value?.let { minOf(it, rmsCalibrated) } ?: rmsCalibrated
-                _maxDb.value = _maxDb.value?.let { maxOf(it, rmsCalibrated) } ?: rmsCalibrated
-
-                if (Log.isLoggable(TAG, Log.VERBOSE)) {
-                    Log.v(
-                        TAG,
-                        "raw=${reading.rmsDbFs} peak=${reading.peakDbFs} " +
-                            "offset=$offset cal=$rmsCalibrated leq=${_avgDb.value}"
-                    )
-                }
-            }
+        if (capture.value.isRecording) return
+        val config = audioRecorder.start(
+            onStart = { meter.start(it.sampleRate) },
+            onSamples = { samples, count -> meter.process(samples, count, ::onReading) },
+        )
+        capture.update {
+            it.copy(
+                isRecording = config != null,
+                micUnavailable = config == null,
+                source = config?.source ?: it.source,
+            )
         }
-        _isRecording.value = true
-        startTimer()
     }
 
-    /** Stops the mic but keeps stats and chart visible (acts as Pause). */
+    /** Stops the microphone but keeps the measurement, like a meter's pause key. */
     fun pauseRecording() {
-        if (!_isRecording.value) return
-        audioRecorder.stopRecording()
-        _isRecording.value = false
-        timerJob?.cancel()
-        _sessionReadings.value = _decibelReadings.value.toList()
-        _hasSessionData.value = _sessionReadings.value.isNotEmpty()
+        if (!capture.value.isRecording) return
+        audioRecorder.stop()
+        capture.update { it.copy(isRecording = false) }
     }
 
-    /** Full reset: stops recording and clears stats / chart. */
+    /** Clears the measurement; a running capture keeps going from scratch. */
     fun resetMeasurement() {
-        if (_isRecording.value) {
-            audioRecorder.stopRecording()
-            _isRecording.value = false
-            timerJob?.cancel()
-        }
-        _decibelLevel.value = 0f
-        _peakDb.value = null
-        _decibelReadings.value = emptyList()
-        _sessionReadings.value = emptyList()
-        _hasSessionData.value = false
-        _recordingTime.value = 0L
-        _minDb.value = null
-        _maxDb.value = null
-        _avgDb.value = null
-        sampleCount = 0
-        sumEnergyLin = 0.0
+        val wasRecording = capture.value.isRecording
+        if (wasRecording) audioRecorder.stop()
+        meter.reset()
+        capture.update { it.copy(isRecording = false, reading = null, history = emptyList()) }
+        if (wasRecording) startRecording()
     }
 
-    /** Backward-compat alias used by older code paths. */
-    fun stopRecording() = pauseRecording()
+    private fun onReading(reading: MeterReading) {
+        capture.update {
+            it.copy(reading = reading, history = (it.history + reading).takeLast(MAX_HISTORY))
+        }
+    }
 
-    // ---------- Calibration controls ----------
+    // ---------- Meter settings ----------
+
+    fun setFrequencyWeighting(value: FrequencyWeighting) {
+        viewModelScope.launch { settingsStore.setFrequencyWeighting(value) }
+    }
+
+    fun setTimeWeighting(value: TimeWeighting) {
+        viewModelScope.launch { settingsStore.setTimeWeighting(value) }
+    }
+
+    // ---------- Calibration ----------
 
     fun adjustCalibration(deltaDb: Float) {
-        val newValue = (calibrationOffset.value + deltaDb)
-            .coerceIn(CalibrationStore.MIN_OFFSET_DB, CalibrationStore.MAX_OFFSET_DB)
-        viewModelScope.launch { calibrationStore.setOffset(newValue) }
+        val source = calibrationSource()
+        setCalibration(source, settings.value.calibrationFor(source) + deltaDb)
     }
 
-    fun resetCalibration() {
-        viewModelScope.launch { calibrationStore.setOffset(CalibrationStore.DEFAULT_OFFSET_DB) }
-    }
+    fun resetCalibration() = setCalibration(calibrationSource(), 0f)
 
     /**
-     * Aligns the calibration so that the currently displayed level matches
-     * [referenceDb] (the value read on a real sound meter held next to the phone).
+     * Shifts the calibration so the current Slow level matches [referenceDb],
+     * the value of a reference sound level meter next to the phone on the
+     * same weighting, measuring a steady sound.
      */
     fun alignCalibrationToReference(referenceDb: Float) {
-        val current = _decibelLevel.value
-        if (current <= 0f) return
-        val newValue = (calibrationOffset.value + (referenceDb - current))
-            .coerceIn(CalibrationStore.MIN_OFFSET_DB, CalibrationStore.MAX_OFFSET_DB)
-        viewModelScope.launch { calibrationStore.setOffset(newValue) }
+        val reading = capture.value.reading ?: return
+        if (reading.signalLost) return
+        val source = calibrationSource()
+        val current = settings.value
+        val measured = reading[current.frequencyWeighting][TimeWeighting.SLOW].levelDb + source.fullScaleSpl
+        setCalibration(source, referenceDb - measured)
     }
 
-    // ---------- Misc ----------
-
-    private fun startTimer() {
-        timerJob = viewModelScope.launch {
-            while (isActive) {
-                delay(1000)
-                _recordingTime.value += 1
-            }
-        }
+    private fun setCalibration(source: MicSource, valueDb: Float) {
+        viewModelScope.launch { settingsStore.setCalibration(source, valueDb) }
     }
+
+    private fun calibrationSource(): MicSource = capture.value.source ?: MicSource.UNPROCESSED
+
+    // ---------- Export ----------
 
     fun exportGraphToPdf(context: Context): String? {
-        return if (_sessionReadings.value.isNotEmpty()) {
-            pdfGenerator.generateDecibelGraphPdf(context, _sessionReadings.value)
-        } else null
+        val readings = toUiState(capture.value, settings.value).history
+        return if (readings.isNotEmpty()) pdfGenerator.generateDecibelGraphPdf(context, readings) else null
     }
 
-    fun clearSessionData() {
-        _sessionReadings.value = emptyList()
-        _hasSessionData.value = false
+    private fun toUiState(c: Capture, s: MeterSettings): MeterUiState {
+        val source = c.source ?: MicSource.UNPROCESSED
+        val calibration = s.calibrationFor(source)
+        val offset = source.fullScaleSpl + calibration
+        val weighted = c.reading?.get(s.frequencyWeighting)?.shifted(offset)
+        val stats = weighted?.get(s.timeWeighting)
+        return MeterUiState(
+            isRecording = c.isRecording,
+            micUnavailable = c.micUnavailable,
+            frequencyWeighting = s.frequencyWeighting,
+            timeWeighting = s.timeWeighting,
+            calibrationDb = calibration,
+            levelDb = stats?.levelDb,
+            minDb = stats?.minDb,
+            maxDb = stats?.maxDb,
+            leqDb = weighted?.leqDb,
+            peakDb = weighted?.peakMaxDb,
+            overload = c.reading?.overload == true,
+            overloadLatched = c.reading?.overloadLatched == true,
+            signalLost = c.reading?.signalLost == true,
+            elapsedSeconds = c.reading?.durationSeconds?.toLong() ?: 0,
+            history = c.history.map {
+                it[s.frequencyWeighting][s.timeWeighting].levelDb + offset
+            },
+        )
     }
 
     override fun onCleared() {
         super.onCleared()
-        if (_isRecording.value) audioRecorder.stopRecording()
-        timerJob?.cancel()
+        audioRecorder.stop()
     }
 
     companion object {
-        private const val MAX_LIVE_READINGS = 200
-        private const val TAG = "MainViewModel"
+        /** 20 s of history at 10 readings per second. */
+        private const val MAX_HISTORY = 200
     }
 }

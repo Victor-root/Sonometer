@@ -25,18 +25,26 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.djmeter.R
+import com.example.djmeter.ui.theme.SonoRed
+import com.example.djmeter.utils.FrequencyWeighting
 import kotlin.math.roundToInt
 
-/** Big centered dB value with optional elapsed time and "dB" unit. */
+/**
+ * Big centered level with the measurement duration, the weighted unit and
+ * the overload indicator: lit while the input clips, dimmed once it has
+ * clipped during the measurement, like the "OVER" flag of a physical meter.
+ */
 @Composable
 fun DbValueDisplay(
-    decibel: Float,
+    decibel: Float?,
+    weighting: FrequencyWeighting,
     elapsedSeconds: Long,
+    overload: Boolean,
+    overloadLatched: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val onSurface = MaterialTheme.colorScheme.onBackground
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val unit = stringResource(R.string.unit_db)
 
     Row(
         modifier = modifier,
@@ -44,7 +52,7 @@ fun DbValueDisplay(
         horizontalArrangement = Arrangement.Center,
     ) {
         Text(
-            text = formatDecibel(decibel),
+            text = decibel?.let { formatDecibel(it) } ?: PLACEHOLDER,
             color = onSurface,
             fontSize = 88.sp,
             fontWeight = FontWeight.Light,
@@ -60,21 +68,30 @@ fun DbValueDisplay(
                 fontSize = 14.sp,
             )
             Text(
-                text = unit,
+                text = stringResource(R.string.unit_db_weighted, weighting.name),
                 color = muted,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
             )
+            if (overload || overloadLatched) {
+                Text(
+                    text = stringResource(R.string.status_overload),
+                    color = if (overload) SonoRed else SonoRed.copy(alpha = 0.45f),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
         }
     }
 }
 
-/** Row with MIN. / AVG. / MAX. (each label may be hidden if value is null). */
+/** Row with LEQ / MIN. / MAX. / PEAK (each value may be absent). */
 @Composable
 fun DbStatsRow(
+    leqDb: Float?,
     minDb: Float?,
-    avgDb: Float?,
     maxDb: Float?,
+    peakDb: Float?,
     modifier: Modifier = Modifier,
 ) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -83,9 +100,10 @@ fun DbStatsRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatBlock(label = stringResource(R.string.label_avg), value = avgDb, muted = muted)
+        StatBlock(label = stringResource(R.string.label_leq), value = leqDb, muted = muted)
         StatBlock(label = stringResource(R.string.label_min), value = minDb, muted = muted)
         StatBlock(label = stringResource(R.string.label_max), value = maxDb, muted = muted)
+        StatBlock(label = stringResource(R.string.label_peak_stat), value = peakDb, muted = muted)
     }
 }
 
@@ -94,7 +112,7 @@ private fun StatBlock(label: String, value: Float?, muted: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(text = label, color = muted, fontSize = 13.sp, fontWeight = FontWeight.Medium)
         Text(
-            text = value?.let { formatDecibel(it) } ?: "--",
+            text = value?.let { formatDecibel(it) } ?: PLACEHOLDER,
             color = muted,
             fontSize = 18.sp,
             fontWeight = FontWeight.Light,
@@ -179,6 +197,8 @@ private fun colorBarSegments(): List<Color> {
         deep, dark, dark, dark,
     )
 }
+
+private const val PLACEHOLDER = "--"
 
 private fun formatDecibel(value: Float): String {
     val rounded = (value * 10f).roundToInt() / 10f

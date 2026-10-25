@@ -17,6 +17,8 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.log10
+import kotlin.math.pow
 import com.itextpdf.layout.element.Table
 import com.itextpdf.layout.element.Cell
 import com.itextpdf.kernel.colors.ColorConstants
@@ -61,7 +63,8 @@ class PdfGenerator {
                 .setBold())
 
             // Calculate statistics
-            val avgDecibel = readings.average()
+            // Energy average (Leq) of the levels, not their arithmetic mean.
+            val avgDecibel = 10 * log10(readings.map { 10.0.pow(it / 10.0) }.average())
             val maxDecibel = readings.maxOrNull() ?: 0f
             val minDecibel = readings.minOrNull() ?: 0f
             

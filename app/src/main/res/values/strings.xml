@@ -2,10 +2,11 @@
     <string name="app_name">Sonometer</string>
 
     <!-- Units & labels -->
-    <string name="unit_db">dB</string>
+    <string name="unit_db_weighted">dB(%1$s)</string>
+    <string name="label_leq">LEQ</string>
     <string name="label_min">MIN.</string>
-    <string name="label_avg">AVG.</string>
     <string name="label_max">MAX.</string>
+    <string name="label_peak_stat">PEAK</string>
     <string name="label_peak">Peak</string>
     <string name="label_min_short">Min.</string>
     <string name="label_max_short">Max.</string>
@@ -44,18 +45,28 @@
     <string name="cd_button_export">Export</string>
     <string name="cd_button_reset">Reset</string>
     <string name="cd_button_weighting">Weighting</string>
+    <string name="cd_frequency_weighting">Frequency weighting</string>
+    <string name="cd_time_weighting">Time weighting</string>
 
     <!-- Calibration -->
     <string name="calibration_title">Calibration</string>
     <string name="calibration_correction">Correction</string>
     <string name="calibration_reset">Reset</string>
     <string name="calibration_align_title">Align with a sound meter</string>
+    <string name="calibration_align_hint">Use a steady sound, the same weighting on both devices, and hold the phone next to the sound meter.</string>
     <string name="calibration_reference_label">Sound meter value</string>
     <string name="calibration_align_action">Align</string>
     <string name="calibration_apply">Apply</string>
     <string name="calibration_value_format">%+.1f dB</string>
     <string name="weighting_fast">Fast</string>
     <string name="weighting_slow">Slow</string>
+    <string name="weighting_impulse">Impulse</string>
+
+    <!-- Meter status -->
+    <string name="status_overload">OVER</string>
+    <string name="status_mic_unavailable">Microphone unavailable</string>
+    <string name="status_signal_lost">Microphone in use by another app</string>
+    <string name="status_settling">Measuring…</string>
 
     <!-- Misc -->
     <string name="time_format">%02d:%02d</string>

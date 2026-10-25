@@ -31,7 +31,7 @@ enum class SoundLevel(
 
 /** dB range used by the gauge and chart. */
 const val DB_MIN = 20f
-const val DB_MAX = 120f
+const val DB_MAX = 130f
 
 /** Threshold above which the gauge / chart turn red-orange. */
 const val DB_HOT_THRESHOLD = 90f

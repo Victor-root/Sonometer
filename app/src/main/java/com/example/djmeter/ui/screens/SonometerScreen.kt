@@ -47,21 +47,19 @@ import com.example.djmeter.ui.components.DbLevelColorBar
 import com.example.djmeter.ui.components.DbLevelDescriptor
 import com.example.djmeter.ui.components.DbStatsRow
 import com.example.djmeter.ui.components.DbValueDisplay
+import com.example.djmeter.ui.components.DB_MIN
+import com.example.djmeter.ui.components.MeterModeSelector
+import com.example.djmeter.utils.FrequencyWeighting
+import com.example.djmeter.utils.TimeWeighting
 import com.example.djmeter.viewmodels.MainViewModel
+import com.example.djmeter.viewmodels.MeterUiState
 
 @Composable
 fun SonometerScreen(
     viewModel: MainViewModel = viewModel(),
 ) {
     val context = LocalContext.current
-    val decibel by viewModel.decibelLevel.collectAsState()
-    val isRecording by viewModel.isRecording.collectAsState()
-    val readings by viewModel.decibelReadings.collectAsState()
-    val recordingTime by viewModel.recordingTime.collectAsState()
-    val minDb by viewModel.minDb.collectAsState()
-    val avgDb by viewModel.avgDb.collectAsState()
-    val maxDb by viewModel.maxDb.collectAsState()
-    val calibrationOffset by viewModel.calibrationOffset.collectAsState()
+    val state by viewModel.uiState.collectAsState()
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -81,7 +79,7 @@ fun SonometerScreen(
     // If the permission isn't granted yet, request it once on first composition.
     LaunchedEffect(permissionGranted) {
         if (permissionGranted) {
-            if (!viewModel.isRecording.value) viewModel.startRecording()
+            viewModel.startRecording()
         } else {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -104,21 +102,16 @@ fun SonometerScreen(
             )
         } else {
             SonometerContent(
-                decibel = decibel,
-                isRecording = isRecording,
-                readings = readings,
-                recordingTime = recordingTime,
-                minDb = minDb,
-                avgDb = avgDb,
-                maxDb = maxDb,
-                calibrationOffset = calibrationOffset,
+                state = state,
                 topPadding = statusBarsPadding,
                 bottomPadding = systemBarsPadding,
-                onToggle = { viewModel.toggleRecording() },
-                onReset = { viewModel.resetMeasurement() },
-                onCalibrationAdjust = { viewModel.adjustCalibration(it) },
-                onCalibrationReset = { viewModel.resetCalibration() },
-                onCalibrationAlign = { viewModel.alignCalibrationToReference(it) },
+                onToggle = viewModel::toggleRecording,
+                onReset = viewModel::resetMeasurement,
+                onFrequencyWeighting = viewModel::setFrequencyWeighting,
+                onTimeWeighting = viewModel::setTimeWeighting,
+                onCalibrationAdjust = viewModel::adjustCalibration,
+                onCalibrationReset = viewModel::resetCalibration,
+                onCalibrationAlign = viewModel::alignCalibrationToReference,
                 onExport = {
                     val pdf = viewModel.exportGraphToPdf(context)
                     val msg = if (pdf != null) "PDF: $pdf"
@@ -132,23 +125,19 @@ fun SonometerScreen(
 
 @Composable
 private fun SonometerContent(
-    decibel: Float,
-    isRecording: Boolean,
-    readings: List<Float>,
-    recordingTime: Long,
-    minDb: Float?,
-    avgDb: Float?,
-    maxDb: Float?,
-    calibrationOffset: Float,
+    state: MeterUiState,
     topPadding: PaddingValues,
     bottomPadding: PaddingValues,
     onToggle: () -> Unit,
     onReset: () -> Unit,
+    onFrequencyWeighting: (FrequencyWeighting) -> Unit,
+    onTimeWeighting: (TimeWeighting) -> Unit,
     onCalibrationAdjust: (Float) -> Unit,
     onCalibrationReset: () -> Unit,
     onCalibrationAlign: (Float) -> Unit,
     onExport: () -> Unit,
 ) {
+    val level = state.levelDb?.takeUnless { state.signalLost }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -158,9 +147,9 @@ private fun SonometerContent(
         Spacer(Modifier.height(16.dp))
 
         DbGauge(
-            decibel = decibel,
-            minDb = minDb,
-            peakDb = maxDb,
+            decibel = level ?: DB_MIN,
+            minDb = state.minDb,
+            peakDb = state.maxDb,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp),
@@ -169,24 +158,38 @@ private fun SonometerContent(
         Spacer(Modifier.height(8.dp))
 
         DbValueDisplay(
-            decibel = decibel,
-            elapsedSeconds = recordingTime,
+            decibel = level,
+            weighting = state.frequencyWeighting,
+            elapsedSeconds = state.elapsedSeconds,
+            overload = state.overload,
+            overloadLatched = state.overloadLatched,
             modifier = Modifier.padding(horizontal = 24.dp),
         )
 
         Spacer(Modifier.height(8.dp))
 
+        MeterModeSelector(
+            frequencyWeighting = state.frequencyWeighting,
+            timeWeighting = state.timeWeighting,
+            onFrequencyWeighting = onFrequencyWeighting,
+            onTimeWeighting = onTimeWeighting,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
+
+        Spacer(Modifier.height(10.dp))
+
         DbStatsRow(
-            minDb = minDb,
-            avgDb = avgDb,
-            maxDb = maxDb,
-            modifier = Modifier.padding(horizontal = 32.dp),
+            leqDb = state.leqDb,
+            minDb = state.minDb,
+            maxDb = state.maxDb,
+            peakDb = state.peakDb,
+            modifier = Modifier.padding(horizontal = 24.dp),
         )
 
         Spacer(Modifier.height(10.dp))
 
         CalibrationCard(
-            correctionDb = calibrationOffset,
+            correctionDb = state.calibrationDb,
             onAdjust = onCalibrationAdjust,
             onReset = onCalibrationReset,
             onAlign = onCalibrationAlign,
@@ -197,19 +200,24 @@ private fun SonometerContent(
 
         Spacer(Modifier.height(10.dp))
 
-        DbLevelDescriptor(decibel = decibel)
+        when {
+            state.micUnavailable -> StatusMessage(stringResource(R.string.status_mic_unavailable))
+            state.signalLost -> StatusMessage(stringResource(R.string.status_signal_lost))
+            level != null -> DbLevelDescriptor(decibel = level)
+            else -> StatusMessage(stringResource(R.string.status_settling))
+        }
 
         Spacer(Modifier.height(12.dp))
 
         DbLevelColorBar(
-            decibel = decibel,
+            decibel = level ?: DB_MIN,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
 
         Spacer(Modifier.height(8.dp))
 
         DbHistoryChart(
-            readings = readings,
+            readings = state.history,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
@@ -219,7 +227,7 @@ private fun SonometerContent(
         Spacer(Modifier.height(12.dp))
 
         BottomControlBar(
-            isRecording = isRecording,
+            isRecording = state.isRecording,
             onExport = onExport,
             onToggleRecording = onToggle,
             onReset = onReset,
@@ -231,6 +239,17 @@ private fun SonometerContent(
             )
         )
     }
+}
+
+@Composable
+private fun StatusMessage(text: String) {
+    Text(
+        text = text,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 16.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.padding(horizontal = 16.dp),
+    )
 }
 
 @Composable
