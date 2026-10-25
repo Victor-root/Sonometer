@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -194,33 +195,75 @@ private fun DrawScope.drawGauge(
         db += minorStep
     }
 
-    // Min marker — drawn INSIDE the arc so it doesn't collide with the "20" label.
+    // Min marker — tick on arc + label rotated along tangent, placed well inside the arc.
     if (minDb != null) {
-        val frac = ((minDb - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
-        val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * frac
-        drawTick(cx, cy, outerRadius - arcStroke / 2f, tickMajorLen * 0.7f, angleDeg, mutedColor, major = true)
-        safeDrawArcLabel(textMeasurer, minLabel, smallStyle.copy(color = mutedColor),
-            cx, cy, outerRadius * 0.82f, angleDeg, size)
+        val minFrac = ((minDb.coerceIn(DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
+        val minAngleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * minFrac
+        val minRad = Math.toRadians(minAngleDeg.toDouble())
+        drawTick(cx, cy, outerRadius - arcStroke / 2f, tickMajorLen * 0.7f, minAngleDeg, mutedColor, major = true)
+        val minStyled = smallStyle.copy(color = mutedColor)
+        val minMeasured = textMeasurer.measure(minLabel, minStyled)
+        val mtw = minMeasured.size.width.toFloat()
+        val mth = minMeasured.size.height.toFloat()
+        val mlx = cx + (outerRadius * 0.72f * cos(minRad)).toFloat()
+        val mly = cy + (outerRadius * 0.72f * sin(minRad)).toFloat()
+        withTransform({ rotate(minAngleDeg + 90f, Offset(mlx, mly)) }) {
+            drawText(
+                textMeasurer = textMeasurer,
+                text = minLabel,
+                style = minStyled,
+                topLeft = Offset(mlx - mtw / 2f, mly - mth / 2f),
+                size = Size(mtw, mth),
+            )
+        }
     }
 
-    // Peak marker — bar across the arc, then "Peak" + value drawn INSIDE the arc
-    // (below the tick), matching the reference screenshot.
+    // Peak marker — thin red tick crossing the arc (persists as needle moves),
+    // then "Peak" + value rotated along the arc tangent.
     if (peakDb != null) {
-        val frac = ((peakDb - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
-        val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * frac
-        val rad = Math.toRadians(angleDeg.toDouble())
-        val rOuter = outerRadius + arcStroke
-        val rInner = outerRadius - arcStroke * 2f
+        val peakFrac = ((peakDb.coerceIn(DB_MIN, DB_MAX) - DB_MIN) / (DB_MAX - DB_MIN))
+        val peakAngleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * peakFrac
+        val peakRad = Math.toRadians(peakAngleDeg.toDouble())
+
+        // Red tick crossing the arc from inner to outer edge
+        val rOuter = outerRadius + arcStroke * 1.8f
+        val rInner = outerRadius - arcStroke * 3.2f
         drawLine(
             color = hotColor,
-            start = Offset(cx + (rInner * cos(rad)).toFloat(), cy + (rInner * sin(rad)).toFloat()),
-            end = Offset(cx + (rOuter * cos(rad)).toFloat(), cy + (rOuter * sin(rad)).toFloat()),
-            strokeWidth = arcStroke * 0.9f,
+            start = Offset(cx + (rInner * cos(peakRad)).toFloat(), cy + (rInner * sin(peakRad)).toFloat()),
+            end = Offset(cx + (rOuter * cos(peakRad)).toFloat(), cy + (rOuter * sin(peakRad)).toFloat()),
+            strokeWidth = arcStroke * 0.85f,
+            cap = StrokeCap.Butt,
         )
-        safeDrawArcLabel(textMeasurer, peakLabel, smallStyle,
-            cx, cy, outerRadius * 0.82f, angleDeg, size)
-        safeDrawArcLabel(textMeasurer, peakDb.toInt().toString(), smallStyle,
-            cx, cy, outerRadius * 0.68f, angleDeg, size)
+
+        // "Peak" label + value stacked, rotated so baseline is tangent to the arc
+        val blockCenterR = outerRadius * 0.76f
+        val plx = cx + (blockCenterR * cos(peakRad)).toFloat()
+        val ply = cy + (blockCenterR * sin(peakRad)).toFloat()
+        val peakMeasured = textMeasurer.measure(peakLabel, smallStyle)
+        val valueMeasured = textMeasurer.measure(peakDb.toInt().toString(), smallStyle)
+        val ptw = peakMeasured.size.width.toFloat()
+        val pth = peakMeasured.size.height.toFloat()
+        val vtw = valueMeasured.size.width.toFloat()
+        val vth = valueMeasured.size.height.toFloat()
+        val gap = 2f
+        val totalH = pth + gap + vth
+        withTransform({ rotate(peakAngleDeg + 90f, Offset(plx, ply)) }) {
+            drawText(
+                textMeasurer = textMeasurer,
+                text = peakLabel,
+                style = smallStyle,
+                topLeft = Offset(plx - ptw / 2f, ply - totalH / 2f),
+                size = Size(ptw, pth),
+            )
+            drawText(
+                textMeasurer = textMeasurer,
+                text = peakDb.toInt().toString(),
+                style = smallStyle,
+                topLeft = Offset(plx - vtw / 2f, ply - totalH / 2f + pth + gap),
+                size = Size(vtw, vth),
+            )
+        }
     }
 
     // Animated needle
@@ -249,37 +292,6 @@ private fun DrawScope.drawTick(
     )
 }
 
-/**
- * Draws a short label at a polar position on the arc.
- * Passes explicit [size] to drawText so maxWidth is never computed from topLeft.
- */
-private fun DrawScope.safeDrawArcLabel(
-    measurer: TextMeasurer,
-    text: String,
-    style: TextStyle,
-    cx: Float, cy: Float,
-    radius: Float,
-    angleDeg: Float,
-    canvasSize: Size,
-) {
-    val rad = Math.toRadians(angleDeg.toDouble())
-    val px = cx + (radius * cos(rad)).toFloat()
-    val py = cy + (radius * sin(rad)).toFloat()
-    val measured = measurer.measure(text, style)
-    val tw = measured.size.width.toFloat()
-    val th = measured.size.height.toFloat()
-    val tx = px - tw / 2f
-    val ty = py - th / 2f
-    if (tx + tw > 0f && tx < canvasSize.width && ty + th > 0f && ty < canvasSize.height) {
-        drawText(
-            textMeasurer = measurer,
-            text = text,
-            style = style,
-            topLeft = Offset(tx.coerceAtLeast(0f), ty.coerceAtLeast(0f)),
-            size = Size(tw, th),
-        )
-    }
-}
 
 private fun DrawScope.drawNeedle(
     cx: Float, cy: Float, radius: Float,
