@@ -45,6 +45,18 @@
     <string name="cd_button_reset">Reset</string>
     <string name="cd_button_weighting">Weighting</string>
 
+    <!-- Calibration -->
+    <string name="calibration_title">Calibration</string>
+    <string name="calibration_correction">Correction</string>
+    <string name="calibration_reset">Reset</string>
+    <string name="calibration_align_title">Align with a sound meter</string>
+    <string name="calibration_reference_label">Sound meter value</string>
+    <string name="calibration_align_action">Align</string>
+    <string name="calibration_apply">Apply</string>
+    <string name="calibration_value_format">%+.1f dB</string>
+    <string name="weighting_fast">Fast</string>
+    <string name="weighting_slow">Slow</string>
+
     <!-- Misc -->
     <string name="time_format">%02d:%02d</string>
 </resources>

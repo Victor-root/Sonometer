@@ -45,6 +45,18 @@
     <string name="cd_button_reset">Réinitialiser</string>
     <string name="cd_button_weighting">Pondération</string>
 
+    <!-- Calibration -->
+    <string name="calibration_title">Calibration</string>
+    <string name="calibration_correction">Correction</string>
+    <string name="calibration_reset">Réinit.</string>
+    <string name="calibration_align_title">Aligner avec un sonomètre</string>
+    <string name="calibration_reference_label">Valeur du sonomètre</string>
+    <string name="calibration_align_action">Aligner</string>
+    <string name="calibration_apply">Appliquer</string>
+    <string name="calibration_value_format">%+.1f dB</string>
+    <string name="weighting_fast">Fast</string>
+    <string name="weighting_slow">Slow</string>
+
     <!-- Misc -->
     <string name="time_format">%02d:%02d</string>
 </resources>

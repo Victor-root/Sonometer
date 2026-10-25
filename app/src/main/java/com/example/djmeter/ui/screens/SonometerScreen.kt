@@ -40,6 +40,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.djmeter.R
 import com.example.djmeter.ui.components.BottomControlBar
+import com.example.djmeter.ui.components.CalibrationCard
 import com.example.djmeter.ui.components.DbGauge
 import com.example.djmeter.ui.components.DbHistoryChart
 import com.example.djmeter.ui.components.DbLevelColorBar
@@ -60,6 +61,7 @@ fun SonometerScreen(
     val minDb by viewModel.minDb.collectAsState()
     val avgDb by viewModel.avgDb.collectAsState()
     val maxDb by viewModel.maxDb.collectAsState()
+    val calibrationOffset by viewModel.calibrationOffset.collectAsState()
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -109,10 +111,14 @@ fun SonometerScreen(
                 minDb = minDb,
                 avgDb = avgDb,
                 maxDb = maxDb,
+                calibrationOffset = calibrationOffset,
                 topPadding = statusBarsPadding,
                 bottomPadding = systemBarsPadding,
                 onToggle = { viewModel.toggleRecording() },
                 onReset = { viewModel.resetMeasurement() },
+                onCalibrationAdjust = { viewModel.adjustCalibration(it) },
+                onCalibrationReset = { viewModel.resetCalibration() },
+                onCalibrationAlign = { viewModel.alignCalibrationToReference(it) },
                 onExport = {
                     val pdf = viewModel.exportGraphToPdf(context)
                     val msg = if (pdf != null) "PDF: $pdf"
@@ -133,10 +139,14 @@ private fun SonometerContent(
     minDb: Float?,
     avgDb: Float?,
     maxDb: Float?,
+    calibrationOffset: Float,
     topPadding: PaddingValues,
     bottomPadding: PaddingValues,
     onToggle: () -> Unit,
     onReset: () -> Unit,
+    onCalibrationAdjust: (Float) -> Unit,
+    onCalibrationReset: () -> Unit,
+    onCalibrationAlign: (Float) -> Unit,
     onExport: () -> Unit,
 ) {
     Column(
@@ -173,7 +183,19 @@ private fun SonometerContent(
             modifier = Modifier.padding(horizontal = 32.dp),
         )
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+
+        CalibrationCard(
+            correctionDb = calibrationOffset,
+            onAdjust = onCalibrationAdjust,
+            onReset = onCalibrationReset,
+            onAlign = onCalibrationAlign,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        )
+
+        Spacer(Modifier.height(10.dp))
 
         DbLevelDescriptor(decibel = decibel)
 
