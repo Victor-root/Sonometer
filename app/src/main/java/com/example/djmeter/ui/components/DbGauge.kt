@@ -34,16 +34,16 @@ import com.example.djmeter.ui.theme.SonoRed
 import kotlin.math.cos
 import kotlin.math.sin
 
-private const val GAUGE_START_ANGLE_DEG = 200f      // 0% (left)
-private const val GAUGE_SWEEP_DEG = 140f            // total arc
+private const val GAUGE_START_ANGLE_DEG = 200f  // left end of arc (standard canvas clockwise)
+private const val GAUGE_SWEEP_DEG = 140f         // total arc span
 
 /**
  * Semi-circular dB gauge from [DB_MIN] to [DB_MAX].
  *
- * Drawing strategy: a single arc is split into two stroked sub-arcs
- * (cool zone + hot zone) so we can color the high-SPL section red.
- * Tick marks and labels are positioned with polar math; the needle is
- * an animated rotation around the arc center.
+ * The arc is split into a cool (grey) zone and a hot (red) zone at [DB_HOT_THRESHOLD].
+ * Labels are drawn outside the arc using polar coordinates.
+ * All drawText calls receive an explicit size so Compose never computes a
+ * negative maxWidth from an out-of-bounds topLeft.
  */
 @Composable
 fun DbGauge(
@@ -54,7 +54,7 @@ fun DbGauge(
     height: Dp = 220.dp,
 ) {
     val animatedDb by animateFloatAsState(
-        targetValue = decibel.coerceIn(0f, DB_MAX),
+        targetValue = decibel.coerceIn(DB_MIN, DB_MAX),
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessLow,
@@ -69,7 +69,7 @@ fun DbGauge(
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = TextStyle(
         color = SonoOnDarkMuted,
-        fontSize = 12.sp,
+        fontSize = 11.sp,
         textAlign = TextAlign.Center,
     )
     val smallStyle = TextStyle(
@@ -116,27 +116,27 @@ private fun DrawScope.drawGauge(
     val w = size.width
     val h = size.height
 
-    // Center & radius — arc center sits below the visible canvas a bit
-    // so the semi-circle uses the full width.
+    // Radius sized to leave room for labels on both sides:
+    // labels at the extremes (20 dB and 120 dB) are at ±cos(20°)≈0.94 from center.
+    // Using w*0.35 keeps the furthest label at 0.5w + 0.45w*0.94 ≈ 0.92w → inside canvas.
+    val outerRadius = w * 0.35f
     val cx = w / 2f
-    val cy = h * 0.95f
-    val outerRadius = (minOf(w / 2f, h) * 0.95f)
-    val arcStroke = (w * 0.012f).coerceAtLeast(4f)
+    val cy = h * 0.94f           // arc center is near the bottom of the canvas
+    val arcStroke = (outerRadius * 0.032f).coerceAtLeast(4f)
 
-    val tickMajorLen = w * 0.045f
-    val tickMinorLen = w * 0.022f
-    val labelOffset = w * 0.10f
+    val tickMajorLen = outerRadius * 0.12f
+    val tickMinorLen = outerRadius * 0.06f
+    val labelRadius = outerRadius + outerRadius * 0.22f  // labels just outside the arc
 
-    // Where the hot zone starts along the arc (90 dB by default)
+    // Hot zone boundary along the arc
     val hotFraction = ((DB_HOT_THRESHOLD - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
     val coolSweep = GAUGE_SWEEP_DEG * hotFraction
     val hotSweep = GAUGE_SWEEP_DEG - coolSweep
 
-    // Arc bounding box (drawn around the offset center).
     val arcTopLeft = Offset(cx - outerRadius, cy - outerRadius)
     val arcSize = Size(outerRadius * 2f, outerRadius * 2f)
 
-    // Cool half
+    // Arc (cool + hot halves)
     drawArc(
         color = mutedColor,
         startAngle = GAUGE_START_ANGLE_DEG,
@@ -146,7 +146,6 @@ private fun DrawScope.drawGauge(
         size = arcSize,
         style = Stroke(width = arcStroke, cap = StrokeCap.Butt),
     )
-    // Hot half
     drawArc(
         color = hotColor,
         startAngle = GAUGE_START_ANGLE_DEG + coolSweep,
@@ -157,7 +156,7 @@ private fun DrawScope.drawGauge(
         style = Stroke(width = arcStroke, cap = StrokeCap.Butt),
     )
 
-    // Tick marks every 10 dB (major) with 4 minor between.
+    // Ticks and labels — major every 10 dB, minor every 2 dB.
     val majorStep = 10
     val minorStep = 2
     var db = DB_MIN.toInt()
@@ -167,41 +166,44 @@ private fun DrawScope.drawGauge(
         val isHot = db >= DB_HOT_THRESHOLD
         val color = if (isHot) hotColor else mutedColor
         val isMajor = db % majorStep == 0
-        val len = if (isMajor) tickMajorLen else tickMinorLen
-        drawTick(cx, cy, outerRadius - arcStroke / 2f, len, angleDeg, color, isMajor)
+        val tickLen = if (isMajor) tickMajorLen else tickMinorLen
+        drawTick(cx, cy, outerRadius - arcStroke / 2f, tickLen, angleDeg, color, isMajor)
 
         if (isMajor) {
-            // Number labels outside of the arc
-            val labelRadius = outerRadius + labelOffset
             val rad = Math.toRadians(angleDeg.toDouble())
             val lx = cx + (labelRadius * cos(rad)).toFloat()
             val ly = cy + (labelRadius * sin(rad)).toFloat()
             val text = db.toString()
             val styled = labelStyle.copy(color = color)
             val measured = textMeasurer.measure(text = text, style = styled)
-            drawText(
-                textMeasurer = textMeasurer,
-                text = text,
-                style = styled,
-                topLeft = Offset(
-                    lx - measured.size.width / 2f,
-                    ly - measured.size.height / 2f,
-                ),
-            )
+            val tw = measured.size.width.toFloat()
+            val th = measured.size.height.toFloat()
+            val tx = lx - tw / 2f
+            val ty = ly - th / 2f
+            // Only draw if fully or mostly within the canvas to avoid negative maxWidth.
+            if (tx + tw > 0f && tx < w && ty + th > 0f && ty < h) {
+                drawText(
+                    textMeasurer = textMeasurer,
+                    text = text,
+                    style = styled,
+                    topLeft = Offset(tx.coerceAtLeast(0f), ty.coerceAtLeast(0f)),
+                    size = Size(tw, th),   // explicit size → no negative maxWidth
+                )
+            }
         }
         db += minorStep
     }
 
-    // Optional Min marker (small tick + label).
+    // Min marker
     if (minDb != null) {
         val frac = ((minDb - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
         val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * frac
-        drawTick(cx, cy, outerRadius - arcStroke / 2f, tickMajorLen * 0.7f, angleDeg, mutedColor, true)
-        drawArcLabel(textMeasurer, minLabel, smallStyle.copy(color = mutedColor),
-            cx, cy, outerRadius + labelOffset * 0.3f, angleDeg)
+        drawTick(cx, cy, outerRadius - arcStroke / 2f, tickMajorLen * 0.7f, angleDeg, mutedColor, major = true)
+        safeDrawArcLabel(textMeasurer, minLabel, smallStyle.copy(color = mutedColor),
+            cx, cy, outerRadius + outerRadius * 0.10f, angleDeg, size)
     }
 
-    // Optional Peak marker (red bar + label).
+    // Peak marker (bar + text)
     if (peakDb != null) {
         val frac = ((peakDb - DB_MIN) / (DB_MAX - DB_MIN)).coerceIn(0f, 1f)
         val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * frac
@@ -214,17 +216,13 @@ private fun DrawScope.drawGauge(
             end = Offset(cx + (rOuter * cos(rad)).toFloat(), cy + (rOuter * sin(rad)).toFloat()),
             strokeWidth = arcStroke * 0.9f,
         )
-        drawArcLabel(
-            textMeasurer, peakLabel, smallStyle,
-            cx, cy, outerRadius + labelOffset * 0.55f, angleDeg,
-        )
-        drawArcLabel(
-            textMeasurer, peakDb.toInt().toString(), smallStyle,
-            cx, cy, outerRadius + labelOffset * 0.95f, angleDeg,
-        )
+        safeDrawArcLabel(textMeasurer, peakLabel, smallStyle,
+            cx, cy, outerRadius + outerRadius * 0.14f, angleDeg, size)
+        safeDrawArcLabel(textMeasurer, peakDb.toInt().toString(), smallStyle,
+            cx, cy, outerRadius + outerRadius * 0.28f, angleDeg, size)
     }
 
-    // Needle — animated rotation around the arc center.
+    // Animated needle
     drawNeedle(
         cx = cx,
         cy = cy,
@@ -241,35 +239,45 @@ private fun DrawScope.drawTick(
 ) {
     val rad = Math.toRadians(angleDeg.toDouble())
     val rInner = rOuter - len
-    val sx = cx + (rOuter * cos(rad)).toFloat()
-    val sy = cy + (rOuter * sin(rad)).toFloat()
-    val ex = cx + (rInner * cos(rad)).toFloat()
-    val ey = cy + (rInner * sin(rad)).toFloat()
     drawLine(
         color = color,
-        start = Offset(sx, sy),
-        end = Offset(ex, ey),
+        start = Offset(cx + (rOuter * cos(rad)).toFloat(), cy + (rOuter * sin(rad)).toFloat()),
+        end = Offset(cx + (rInner * cos(rad)).toFloat(), cy + (rInner * sin(rad)).toFloat()),
         strokeWidth = if (major) 3f else 1.5f,
         cap = StrokeCap.Round,
     )
 }
 
-private fun DrawScope.drawArcLabel(
+/**
+ * Draws a short label at a polar position on the arc.
+ * Passes explicit [size] to drawText so maxWidth is never computed from topLeft.
+ */
+private fun DrawScope.safeDrawArcLabel(
     measurer: TextMeasurer,
     text: String,
     style: TextStyle,
-    cx: Float, cy: Float, radius: Float, angleDeg: Float,
+    cx: Float, cy: Float,
+    radius: Float,
+    angleDeg: Float,
+    canvasSize: Size,
 ) {
     val rad = Math.toRadians(angleDeg.toDouble())
     val px = cx + (radius * cos(rad)).toFloat()
     val py = cy + (radius * sin(rad)).toFloat()
     val measured = measurer.measure(text, style)
-    drawText(
-        textMeasurer = measurer,
-        text = text,
-        style = style,
-        topLeft = Offset(px - measured.size.width / 2f, py - measured.size.height / 2f),
-    )
+    val tw = measured.size.width.toFloat()
+    val th = measured.size.height.toFloat()
+    val tx = px - tw / 2f
+    val ty = py - th / 2f
+    if (tx + tw > 0f && tx < canvasSize.width && ty + th > 0f && ty < canvasSize.height) {
+        drawText(
+            textMeasurer = measurer,
+            text = text,
+            style = style,
+            topLeft = Offset(tx.coerceAtLeast(0f), ty.coerceAtLeast(0f)),
+            size = Size(tw, th),
+        )
+    }
 }
 
 private fun DrawScope.drawNeedle(
@@ -278,12 +286,10 @@ private fun DrawScope.drawNeedle(
 ) {
     val angleDeg = GAUGE_START_ANGLE_DEG + GAUGE_SWEEP_DEG * valueFrac
     val rad = Math.toRadians(angleDeg.toDouble())
-    val tipX = cx + (radius * cos(rad)).toFloat()
-    val tipY = cy + (radius * sin(rad)).toFloat()
     drawLine(
         color = color,
         start = Offset(cx, cy),
-        end = Offset(tipX, tipY),
+        end = Offset(cx + (radius * cos(rad)).toFloat(), cy + (radius * sin(rad)).toFloat()),
         strokeWidth = baseStroke * 0.9f,
         cap = StrokeCap.Round,
     )
