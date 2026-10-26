@@ -20,6 +20,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import androidx.core.graphics.createBitmap
 import kotlin.math.log10
 import kotlin.math.pow
 import com.itextpdf.layout.element.Table
@@ -76,9 +77,9 @@ class PdfGenerator {
             val table = Table(2).useAllAvailableWidth()
             
             // Add rows to table
-            addTableRow(table, bold, "Average Sound Level", "${String.format("%.1f", avgDecibel)} dB")
-            addTableRow(table, bold, "Maximum Sound Level", "${String.format("%.1f", maxDecibel)} dB")
-            addTableRow(table, bold, "Minimum Sound Level", "${String.format("%.1f", minDecibel)} dB")
+            addTableRow(table, bold, "Average Sound Level", "${String.format(Locale.US, "%.1f", avgDecibel)} dB")
+            addTableRow(table, bold, "Maximum Sound Level", "${String.format(Locale.US, "%.1f", maxDecibel)} dB")
+            addTableRow(table, bold, "Minimum Sound Level", "${String.format(Locale.US, "%.1f", minDecibel)} dB")
             addTableRow(table, bold, "Duration", "${readings.size / 10} seconds")
             
             // Sound level classification
@@ -147,7 +148,7 @@ class PdfGenerator {
                 }
                 addReadingRow(readingsTable, 
                     "${timeStamp/1000}.${timeStamp%1000}s", 
-                    String.format("%.1f", value), 
+                    String.format(Locale.US, "%.1f", value), 
                     level
                 )
             }
@@ -183,7 +184,7 @@ class PdfGenerator {
     private fun createGraphBitmap(readings: List<Float>): Bitmap {
         val width = 800
         val height = 400
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = createBitmap(width, height)
         val canvas = Canvas(bitmap)
         
         // Fill background

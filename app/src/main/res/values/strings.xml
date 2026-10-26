@@ -21,15 +21,7 @@
     <string name="level_format">%1$d dB : %2$s</string>
 
     <!-- Bottom controls -->
-    <string name="action_start">Start</string>
-    <string name="action_pause">Pause</string>
-    <string name="action_reset">Reset</string>
-    <string name="action_settings">Settings</string>
-    <string name="action_chart">Chart</string>
-    <string name="action_calibration">Calibration</string>
-    <string name="action_weighting_a">A weighting</string>
     <string name="action_export">Export</string>
-    <string name="action_history">History</string>
 
     <!-- Permission -->
     <string name="microphone_required">Microphone required</string>
@@ -37,14 +29,11 @@
     <string name="grant_permission">Grant permission</string>
 
     <!-- Content descriptions -->
-    <string name="cd_top_actions">Top actions</string>
     <string name="cd_gauge">Decibel gauge</string>
     <string name="cd_chart">Real-time decibel chart</string>
     <string name="cd_main_button">Start or pause measurement</string>
-    <string name="cd_button_chart">Show chart</string>
     <string name="cd_button_export">Export</string>
     <string name="cd_button_reset">Reset</string>
-    <string name="cd_button_weighting">Weighting</string>
     <string name="cd_frequency_weighting">Frequency weighting</string>
     <string name="cd_time_weighting">Time weighting</string>
 
@@ -56,7 +45,6 @@
     <string name="calibration_align_hint">Use a steady sound, the same weighting on both devices, and hold the phone next to the sound meter.</string>
     <string name="calibration_reference_label">Sound meter value</string>
     <string name="calibration_align_action">Align</string>
-    <string name="calibration_apply">Apply</string>
     <string name="calibration_value_format">%+.1f dB</string>
     <string name="weighting_fast">Fast</string>
     <string name="weighting_slow">Slow</string>
@@ -69,5 +57,4 @@
     <string name="status_settling">Measuring…</string>
 
     <!-- Misc -->
-    <string name="time_format">%02d:%02d</string>
 </resources>

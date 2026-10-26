@@ -60,6 +60,7 @@ fun SonometerScreen(
 ) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
+    val exportLabel = stringResource(R.string.action_export)
 
     var permissionGranted by remember {
         mutableStateOf(
@@ -114,8 +115,7 @@ fun SonometerScreen(
                 onCalibrationAlign = viewModel::alignCalibrationToReference,
                 onExport = {
                     val pdf = viewModel.exportGraphToPdf(context)
-                    val msg = if (pdf != null) "PDF: $pdf"
-                    else context.getString(R.string.action_export)
+                    val msg = if (pdf != null) "PDF: $pdf" else exportLabel
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 },
             )

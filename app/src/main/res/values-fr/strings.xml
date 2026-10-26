@@ -21,15 +21,7 @@
     <string name="level_format">%1$d dB : %2$s</string>
 
     <!-- Bottom controls -->
-    <string name="action_start">Démarrer</string>
-    <string name="action_pause">Pause</string>
-    <string name="action_reset">Réinitialiser</string>
-    <string name="action_settings">Paramètres</string>
-    <string name="action_chart">Graphique</string>
-    <string name="action_calibration">Calibration</string>
-    <string name="action_weighting_a">Pondération A</string>
     <string name="action_export">Exporter</string>
-    <string name="action_history">Historique</string>
 
     <!-- Permission -->
     <string name="microphone_required">Microphone requis</string>
@@ -37,14 +29,11 @@
     <string name="grant_permission">Autoriser</string>
 
     <!-- Content descriptions -->
-    <string name="cd_top_actions">Actions du haut</string>
     <string name="cd_gauge">Jauge de décibels</string>
     <string name="cd_chart">Graphique des décibels en temps réel</string>
     <string name="cd_main_button">Démarrer ou mettre la mesure en pause</string>
-    <string name="cd_button_chart">Afficher le graphique</string>
     <string name="cd_button_export">Exporter</string>
     <string name="cd_button_reset">Réinitialiser</string>
-    <string name="cd_button_weighting">Pondération</string>
     <string name="cd_frequency_weighting">Pondération fréquentielle</string>
     <string name="cd_time_weighting">Pondération temporelle</string>
 
@@ -56,7 +45,6 @@
     <string name="calibration_align_hint">Utilise un son stable, la même pondération sur les deux appareils, et tiens le téléphone à côté du sonomètre.</string>
     <string name="calibration_reference_label">Valeur du sonomètre</string>
     <string name="calibration_align_action">Aligner</string>
-    <string name="calibration_apply">Appliquer</string>
     <string name="calibration_value_format">%+.1f dB</string>
     <string name="weighting_fast">Fast</string>
     <string name="weighting_slow">Slow</string>
@@ -69,5 +57,4 @@
     <string name="status_settling">Mesure en cours…</string>
 
     <!-- Misc -->
-    <string name="time_format">%02d:%02d</string>
 </resources>
