@@ -5,6 +5,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import com.itextpdf.io.font.constants.StandardFonts
+import com.itextpdf.kernel.font.PdfFont
+import com.itextpdf.kernel.font.PdfFontFactory
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
 import com.itextpdf.layout.Document
@@ -35,12 +38,13 @@ class PdfGenerator {
         val writer = PdfWriter(FileOutputStream(filePath))
         val pdf = PdfDocument(writer)
         val document = Document(pdf)
+        val bold = PdfFontFactory.createFont(StandardFonts.HELVETICA_BOLD)
 
         try {
             // Add title and header
             document.add(Paragraph("Decibel Readings Report")
                 .setFontSize(24f)
-                .setBold()
+                .setFont(bold)
                 .setTextAlignment(TextAlignment.CENTER))
             
             document.add(Paragraph("Generated on: ${
@@ -60,7 +64,7 @@ class PdfGenerator {
             // Add analysis section
             document.add(Paragraph("\nSound Level Analysis")
                 .setFontSize(18f)
-                .setBold())
+                .setFont(bold))
 
             // Calculate statistics
             // Energy average (Leq) of the levels, not their arithmetic mean.
@@ -72,10 +76,10 @@ class PdfGenerator {
             val table = Table(2).useAllAvailableWidth()
             
             // Add rows to table
-            addTableRow(table, "Average Sound Level", "${String.format("%.1f", avgDecibel)} dB")
-            addTableRow(table, "Maximum Sound Level", "${String.format("%.1f", maxDecibel)} dB")
-            addTableRow(table, "Minimum Sound Level", "${String.format("%.1f", minDecibel)} dB")
-            addTableRow(table, "Duration", "${readings.size / 10} seconds")
+            addTableRow(table, bold, "Average Sound Level", "${String.format("%.1f", avgDecibel)} dB")
+            addTableRow(table, bold, "Maximum Sound Level", "${String.format("%.1f", maxDecibel)} dB")
+            addTableRow(table, bold, "Minimum Sound Level", "${String.format("%.1f", minDecibel)} dB")
+            addTableRow(table, bold, "Duration", "${readings.size / 10} seconds")
             
             // Sound level classification
             val classification = when {
@@ -84,7 +88,7 @@ class PdfGenerator {
                 avgDecibel < 85 -> "High (Potentially Harmful)"
                 else -> "Very High (Dangerous Level)"
             }
-            addTableRow(table, "Sound Classification", classification)
+            addTableRow(table, bold, "Sound Classification", classification)
             
             // Environment assessment
             val environment = when {
@@ -93,14 +97,14 @@ class PdfGenerator {
                 avgDecibel < 80 -> "Busy Urban Environment"
                 else -> "Industrial or Very Noisy Environment"
             }
-            addTableRow(table, "Environment Assessment", environment)
+            addTableRow(table, bold, "Environment Assessment", environment)
             
             document.add(table)
             
             // Add recommendations section
             document.add(Paragraph("\nRecommendations")
                 .setFontSize(18f)
-                .setBold())
+                .setFont(bold))
             
             val recommendations = when {
                 avgDecibel > 85 -> listOf(
@@ -127,11 +131,11 @@ class PdfGenerator {
             // Add detailed readings in a collapsible section
             document.add(Paragraph("\nDetailed Readings")
                 .setFontSize(18f)
-                .setBold())
+                .setFont(bold))
             
             // Create readings table
             val readingsTable = Table(3).useAllAvailableWidth()
-            addTableHeader(readingsTable, "Time", "Reading (dB)", "Level")
+            addTableHeader(readingsTable, bold, "Time", "Reading (dB)", "Level")
             
             readings.forEachIndexed { index, value ->
                 val timeStamp = index * 100 // 100ms intervals
@@ -157,16 +161,16 @@ class PdfGenerator {
         return filePath.absolutePath
     }
 
-    private fun addTableRow(table: Table, label: String, value: String) {
-        table.addCell(Cell().add(Paragraph(label).setBold()))
+    private fun addTableRow(table: Table, bold: PdfFont, label: String, value: String) {
+        table.addCell(Cell().add(Paragraph(label).setFont(bold)))
         table.addCell(Cell().add(Paragraph(value)))
     }
 
-    private fun addTableHeader(table: Table, vararg headers: String) {
+    private fun addTableHeader(table: Table, bold: PdfFont, vararg headers: String) {
         headers.forEach { header ->
             table.addHeaderCell(Cell()
                 .setBackgroundColor(ColorConstants.LIGHT_GRAY)
-                .add(Paragraph(header).setBold()))
+                .add(Paragraph(header).setFont(bold)))
         }
     }
 
