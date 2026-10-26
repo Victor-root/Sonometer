@@ -1,123 +1,56 @@
-# DJ Meter 🎵 - Decibel Meter App
+# Sonometer
 
-A modern, feature-rich decibel meter application built with Jetpack Compose that helps you measure and visualize sound levels in real-time. 🎚️
+[Français](README.fr.md)
 
-## Features 🌟
+Android sound level meter built with Jetpack Compose. The measurement engine follows IEC 61672-1, the standard used by physical sound level meters.
 
-- **Sound Level Meter Engine** 🔊
-  - A, C and Z frequency weightings (IEC 61672-1, Class 1 tolerances at 44.1/48 kHz)
-  - Fast, Slow and Impulse time weightings, applied per sample
-  - Leq (energy average), Lmin, Lmax and peak, all weightings measured simultaneously
-  - Overload indicator, start-up transient and silenced capture excluded from statistics
-  - Raw microphone capture (UNPROCESSED, then VOICE_RECOGNITION) with nominal Android CDD sensitivity
-  - Calibration against a reference sound level meter, stored per microphone source
-  - Range: 20-130 dB SPL
+## Features
 
-- **Professional UI/UX** 💅
-  - Material Design 3 implementation
-  - Dark theme optimized
-  - Smooth animations
-  - Responsive layout
-  - Intuitive controls
+- **Frequency weightings A, C and Z**, Class 1 tolerances at 44.1 and 48 kHz
+- **Time weightings Fast, Slow and Impulse**, applied on every sample
+- **LEQ, MIN, MAX and PEAK**: energy-equivalent level, time-weighted extremes and highest instantaneous level
+- All weightings are measured at the same time: switching keeps the statistics
+- **Overload indicator**, lit while the input clips and dimmed once it has clipped
+- **Raw microphone capture**: `UNPROCESSED` source when available, otherwise `VOICE_RECOGNITION`, with automatic gain control and noise suppression disabled
+- **Calibration** against a reference sound level meter, stored per microphone source
+- Start-up transient and microphone taken by another app are excluded from the statistics
+- Live chart and PDF report
+- English and French
 
-- **Visual Feedback** 📊
-  - Dynamic progress bar
-  - Real-time graph visualization
-  - Color-coded intensity indicators
-  - Pulsating record button
+## Measurement accuracy
 
-- **Technical Information** ⚙️
-  - Sampling rate display
-  - Channel configuration
-  - Sound intensity description
-  - Update rate information
+The conversion to dB SPL uses the microphone sensitivity required by the Android Compatibility Definition Document: 94 dB SPL gives -36 dBFS on `UNPROCESSED`, 90 dB SPL gives -22.35 dBFS on `VOICE_RECOGNITION`. Real phones vary by a few dB and lose sensitivity below about 30 dB and in low frequencies, so calibrating against a reference meter is recommended.
 
-- **Data Visualization** 📈
-  - Bottom sheet graph view
-  - Last 50 readings history
-  - Smooth line graph
-  - Grid lines for better readability
+## Build
 
-## Technical Details 🛠️
+Requirements: Android Studio with JDK 17 or newer, Android SDK 37.
 
-- **Architecture**
-  - MVVM Design Pattern
-  - Clean Architecture
-  - Repository Pattern
-  - Dependency Injection
+| Component | Version |
+|---|---|
+| Android Gradle Plugin | 9.4.1 |
+| Gradle | 9.8.2 |
+| Kotlin | 2.4.21 |
+| minSdk / targetSdk | 24 / 37 |
 
-- **Technologies Used**
-  - Kotlin
-  - Jetpack Compose
-  - Material 3
-  - Android Audio API
-  - Kotlin Coroutines
-  - StateFlow
+All dependency versions live in `gradle/libs.versions.toml`.
 
-## Permission Requirements 🔐
+### Release signing
 
-- Microphone access required
-- Runtime permission handling
-- Graceful permission state management
+Create `keystore.properties` at the project root (ignored by Git):
 
-## Installation 📱
+```properties
+storeFile=path/to/keystore.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
 
-1. Clone the repository
-2. Open in Android Studio
-3. Build and run on your device
+Without this file the release build is produced unsigned.
 
-## TODO List for Contributors 🚀
+## Tests
 
-Here are some exciting features that could be added to the app:
+```
+./gradlew :app:testDebugUnitTest
+```
 
-1. **Sound Recording Feature** 📝
-   - Add ability to record audio
-   - Save recordings with timestamps
-   - Export recordings in different formats
-
-2. **Advanced Analytics** 📊
-   - Frequency spectrum analysis
-   - Sound pattern recognition
-   - Noise pollution alerts
-
-3. **Calibration Tools** 🎯
-   - Device-specific calibration
-   - Reference level adjustment
-   - Professional calibration mode
-
-4. **Social Features** 🤝
-   - Share readings and graphs
-   - Compare measurements with friends
-   - Community-driven noise map
-
-5. **Environmental Impact** 🌍
-   - Noise pollution awareness
-   - Daily/weekly noise reports
-   - Health impact indicators
-
-## Contributing 🤝
-
-Contributions are welcome! Feel free to:
-- Fork the repository
-- Create a feature branch
-- Submit a pull request
-
-## License 📄
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Credits 💖
-
-Created with ❤️ by Ayan 🇮🇳
-
-## Screenshots 📱
-
-[Add your app screenshots here]
-
-## Contact 📧
-
-For any queries or suggestions, feel free to reach out!
-
----
-
-Made with Jetpack Compose 🚀 
+Unit tests check the weighting filters against the IEC 61672-1 tables and the meter against reference responses (tone bursts, decay rates, Leq, overload, pause and resume).
