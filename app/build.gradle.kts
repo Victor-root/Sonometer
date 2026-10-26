@@ -11,11 +11,11 @@ val keystoreProperties = Properties().apply {
 }
 
 android {
-    namespace = "com.example.djmeter"
+    namespace = "app.sonometer.vroot"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.djmeter"
+        applicationId = "app.sonometer.vroot"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
