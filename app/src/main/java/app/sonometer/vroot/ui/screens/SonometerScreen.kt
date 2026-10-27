@@ -144,7 +144,7 @@ private fun SonometerContent(
             .padding(top = topPadding.calculateTopPadding()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(8.dp))
 
         DbGauge(
             decibel = level ?: DB_MIN,

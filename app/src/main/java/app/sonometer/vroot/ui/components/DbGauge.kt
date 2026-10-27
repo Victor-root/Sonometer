@@ -7,7 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -26,17 +26,17 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.sonometer.vroot.R
 import app.sonometer.vroot.ui.theme.SonoOnDarkMuted
 import app.sonometer.vroot.ui.theme.SonoRed
 import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.sin
 
 private const val GAUGE_START_ANGLE_DEG = 200f  // left end of arc (standard canvas clockwise)
 private const val GAUGE_SWEEP_DEG = 140f         // total arc span
+private const val GAUGE_ASPECT_RATIO = 1.45f
 
 /**
  * Semi-circular dB gauge from [DB_MIN] to [DB_MAX].
@@ -52,7 +52,6 @@ fun DbGauge(
     modifier: Modifier = Modifier,
     minDb: Float? = null,
     peakDb: Float? = null,
-    height: Dp = 250.dp,
 ) {
     val animatedDb by animateFloatAsState(
         targetValue = decibel.coerceIn(DB_MIN, DB_MAX),
@@ -83,7 +82,7 @@ fun DbGauge(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(height)
+            .aspectRatio(GAUGE_ASPECT_RATIO)
             .semantics { contentDescription = gaugeCd },
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
@@ -120,9 +119,10 @@ private fun DrawScope.drawGauge(
     val w = size.width
     val h = size.height
 
-    val outerRadius = w * 0.40f
+    // Arc, labels and needle span 1.74 radii vertically: fill the box without a top gap.
+    val outerRadius = min(w * 0.40f, h / 1.74f)
     val cx = w / 2f
-    val cy = h * 0.95f
+    val cy = outerRadius * 1.24f
     val arcStroke = (outerRadius * 0.032f).coerceAtLeast(4f)
 
     val tickMajorLen = outerRadius * 0.12f
