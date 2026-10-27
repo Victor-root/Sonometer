@@ -36,7 +36,7 @@ import kotlin.math.sin
 
 private const val GAUGE_START_ANGLE_DEG = 200f  // left end of arc (standard canvas clockwise)
 private const val GAUGE_SWEEP_DEG = 140f         // total arc span
-private const val GAUGE_ASPECT_RATIO = 1.45f
+private const val GAUGE_ASPECT_RATIO = 1.9f
 
 /**
  * Semi-circular dB gauge from [DB_MIN] to [DB_MAX].
@@ -119,8 +119,8 @@ private fun DrawScope.drawGauge(
     val w = size.width
     val h = size.height
 
-    // Arc, labels and needle span 1.74 radii vertically: fill the box without a top gap.
-    val outerRadius = min(w * 0.40f, h / 1.74f)
+    // Arc ends sit above the hub: drawing spans 1.32 radii from the top labels to the hub.
+    val outerRadius = min(w * 0.40f, h / 1.32f)
     val cx = w / 2f
     val cy = outerRadius * 1.24f
     val arcStroke = (outerRadius * 0.032f).coerceAtLeast(4f)
